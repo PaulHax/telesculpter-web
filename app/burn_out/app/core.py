@@ -1,4 +1,5 @@
 from tkinter import filedialog, Tk
+import webview
 
 from trame.app import get_server, asynchronous
 from trame.decorators import TrameApp, change, controller
@@ -6,6 +7,35 @@ from trame.ui.quasar import QLayout
 from trame.widgets import quasar, html, client
 
 from .assets import ASSETS
+
+import logging
+logger = logging.getLogger(__name__)
+
+# make sure you source setup_KWIVER.sh from kwiver build directory before running the script to set the paths appropriately
+from kwiver.vital.algo import VideoInput
+from kwiver.vital.types import Timestamp
+
+video_source = VideoInput.create("ffmpeg")
+
+
+# this is for using native open file dialog
+# https://stackoverflow.com/a/68230970
+def webview_file_dialog():
+    file = None
+    def open_file_dialog(w):
+        nonlocal file
+        try:
+            file = w.create_file_dialog(webview.OPEN_DIALOG)[0]
+        except TypeError:
+            pass  # user exited file dialog without picking
+        finally:
+            w.destroy()
+    #https://pywebview.flowrl.com/examples/open_file_dialog.html
+    window = webview.create_window("", hidden=True)
+    webview.start(open_file_dialog, window)
+    # file will either be a string or None
+    return file
+
 
 
 @TrameApp()
@@ -38,17 +68,45 @@ class BurnOutApp:
     # -------------------------------------------------------------------------
 
     def open_file(self):
-        file_to_load = filedialog.askopenfile(
-            title="Select video to load",
-        )
+        logger.debug("open file")
+        #file_to_load = filedialog.askopenfile(
+        #    title="Select video to load",
+        #)
+        # TODO not sure how to get string from TExtIO object from above
+        file_to_load = webview_file_dialog()
         print(f"{file_to_load=}")
+        video_source.open(str(file_to_load))
+
+    def get_number_of_frames(self):
+        logger.debug("get_number of frames")
+        print(video_source.num_frames())
+    
+    def ith_frame(self):
+        logger.debug("ith frame")
+        print(video_source.num_frames())
+        ts = Timestamp()
+        k = 5
+
+        video_source.seek_frame(ts,k)
+        image = video_source.frame_image()
+        # see kwiver/python/kwiver/vital/types/image_container.cxx for full API
+        print(image)
+        print(image.size())
+        print(image.width())
+        print(image.asarray())
+      
 
     @controller.set("on_desktop_msg")
     def desktop_msg(self, msg):
+        logger.debug(f"{msg=}")
         if msg == "menu:open-video":
             self.open_file()
         elif msg == "menu:exit":
             self.exit()
+        elif msg =="menu:frame-num":
+          self.get_number_of_frames()
+        elif msg == "menu:ith-num":
+          self.ith_frame()
         else:
             print(f"Desktop msg: {msg}")
 
