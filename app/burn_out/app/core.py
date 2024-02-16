@@ -1,4 +1,5 @@
 from tkinter import filedialog, Tk
+import webview
 
 from trame.app import get_server, asynchronous
 from trame.decorators import TrameApp, change, controller
@@ -9,6 +10,27 @@ from .assets import ASSETS
 
 import logging
 logger = logging.getLogger(__name__)
+
+
+# this is for using native open file dialog
+# https://stackoverflow.com/a/68230970
+def webview_file_dialog():
+    file = None
+    def open_file_dialog(w):
+        nonlocal file
+        try:
+            file = w.create_file_dialog(webview.OPEN_DIALOG)[0]
+        except TypeError:
+            pass  # user exited file dialog without picking
+        finally:
+            w.destroy()
+    #https://pywebview.flowrl.com/examples/open_file_dialog.html
+    window = webview.create_window("", hidden=True)
+    webview.start(open_file_dialog, window)
+    # file will either be a string or None
+    return file
+
+
 
 @TrameApp()
 class BurnOutApp:
@@ -44,6 +66,7 @@ class BurnOutApp:
         file_to_load = filedialog.askopenfile(
             title="Select video to load",
         )
+        #file_to_load = webview_file_dialog()
         print(f"{file_to_load=}")
 
     @controller.set("on_desktop_msg")
