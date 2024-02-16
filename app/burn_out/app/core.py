@@ -7,6 +7,8 @@ from trame.widgets import quasar, html, client
 
 from .assets import ASSETS
 
+import logging
+logger = logging.getLogger(__name__)
 
 @TrameApp()
 class BurnOutApp:
@@ -38,6 +40,7 @@ class BurnOutApp:
     # -------------------------------------------------------------------------
 
     def open_file(self):
+        logger.debug("open file")
         file_to_load = filedialog.askopenfile(
             title="Select video to load",
         )
@@ -45,6 +48,7 @@ class BurnOutApp:
 
     @controller.set("on_desktop_msg")
     def desktop_msg(self, msg):
+        logger.debug(f"{msg=}")
         if msg == "menu:open-video":
             self.open_file()
         elif msg == "menu:exit":
