@@ -12,8 +12,20 @@ def app():
             "File",
             [
                 ("Open video", "open-video"),
-                "---",
-                ("Exit", "exit"),
+                #"---",
+                #("Exit", "exit"),
+            ],
+        ),
+        (
+            "Num frames",
+            [
+                ("num frames", "frame-num"),
+            ],
+        ),
+        (
+            "ith frame",
+            [
+                ("i-th frame", "ith-num"),
             ],
         ),
     ]
