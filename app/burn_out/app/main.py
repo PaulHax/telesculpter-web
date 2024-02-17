@@ -12,8 +12,8 @@ def app():
             "File",
             [
                 ("Open video", "open-video"),
-                #"---",
-                #("Exit", "exit"),
+                # "---",
+                # ("Exit", "exit"),
             ],
         ),
         (
