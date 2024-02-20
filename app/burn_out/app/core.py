@@ -103,10 +103,6 @@ class BurnOutApp:
             file_to_load = str(Path(self.cli_args.data).resolve())
             print("Load file", file_to_load)
             self.open_file(file_to_load)
-            video_fps = self.video_source.frame_rate()
-            if video_fps != -1.0:
-                print(f"{video_fps=}")
-                self.video_fps = video_fps
 
         # Connect our video adapter
         self.ctrl.rc_area_register(self.video_adapter)
@@ -139,7 +135,7 @@ class BurnOutApp:
         self.state.video_n_frames = self.video_source.num_frames()
         video_fps = self.video_source.frame_rate()
         if video_fps != -1.0:
-            logger.debug(f"{video_fps=}")
+            print(f"{video_fps=}")
             self.video_fps = video_fps
 
     @controller.set("on_desktop_msg")
