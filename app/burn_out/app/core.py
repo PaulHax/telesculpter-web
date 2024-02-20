@@ -68,11 +68,13 @@ class BurnOutApp:
             self.tk_root.wm_attributes("-topmost", 1)
         except TclError:
             self.web_only = True
-            self.server.cli.add_argument(
-                "--data",
-                help="Path to video",
-                dest="data",
-            )
+
+        self.server.cli.add_argument(
+            "--data",
+            help="Path to video",
+            dest="data",
+            default=None,
+        )
 
         # Generate UI
         self._build_ui()
@@ -97,7 +99,7 @@ class BurnOutApp:
     @life_cycle.server_ready
     def on_server_ready(self, **kwargs):
         # Load video if provided
-        if self.web_only and self.cli_args.data:
+        if self.cli_args.data:
             file_to_load = str(Path(self.cli_args.data).resolve())
             print("Load file", file_to_load)
             self.open_file(file_to_load)
