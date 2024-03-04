@@ -15,6 +15,7 @@ from .utils import VideoAdapter
 # before running the script to set the paths appropriately
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
+from kwiver.vital.types import tag_traits_by_tag
 
 
 import logging
@@ -195,6 +196,11 @@ class BurnOutApp:
 
         self.video_source.seek_frame(ts, video_current_frame)
         self.video_adapter.update_frame(self.video_source.frame_image())
+        self.metadata = self.video_source.frame_metadata()
+        print(self.metadata)
+        for key,value in self.metadata[0]:
+          pretty_key = tag_traits_by_tag(key).name()
+          print(pretty_key,value.as_string())
 
     @change("video_playing")
     def on_video_playing(self, video_playing, **kwargs):
