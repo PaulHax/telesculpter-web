@@ -56,6 +56,7 @@ class BurnOutApp:
         self.state.trame__title = "Burn Out"
         self.state.trame__favicon = ASSETS.favicon
         self.state.video_loaded = False
+        self.state.ui_meta = []
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
@@ -248,10 +249,10 @@ class BurnOutApp:
         self.video_source.seek_frame(ts, video_current_frame)
         self.video_adapter.update_frame(self.video_source.frame_image())
         self.metadata = self.video_source.frame_metadata()
-        print(self.metadata)
-        for key, value in self.metadata[0]:
-            pretty_key = tag_traits_by_tag(key).name()
-            print(pretty_key, value.as_string())
+        self.state.ui_meta = [
+            dict(name=tag_traits_by_tag(key).name(), value=value.as_string())
+            for key, value in self.metadata[0]
+        ]
 
     @change("video_playing")
     def on_video_playing(self, video_playing, **kwargs):
@@ -345,7 +346,38 @@ class BurnOutApp:
                                         classes="absolute column justify-between content-stretch",
                                         style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
                                     ):
-                                        html.Div("meta")
+                                        quasar.QTable(
+                                            style="width: 100%; height: 100%;",
+                                            dense=True,
+                                            flat=True,
+                                            bordered=True,
+                                            hide_header=True,
+                                            hide_bottom=True,
+                                            separator="cell",
+                                            rowsPerPage=(10000,),
+                                            rows=("ui_meta", []),
+                                            columns=(
+                                                "ui_cols",
+                                                [
+                                                    dict(
+                                                        name="name",
+                                                        label="Key",
+                                                        field="name",
+                                                        classes="text-weight-medium",
+                                                    ),
+                                                    dict(
+                                                        name="value",
+                                                        label="Value",
+                                                        field="value",
+                                                        classes="ellipsis",
+                                                        headerStyle="width: 45%",
+                                                        align="left",
+                                                    ),
+                                                ],
+                                            ),
+                                            row_key="name",
+                                        )
+
                                 with html.Template(raw_attrs=["v-slot:after"]):
                                     with quasar.QCard(
                                         flat=True,
