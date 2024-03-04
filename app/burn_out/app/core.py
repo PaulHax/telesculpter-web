@@ -8,7 +8,7 @@ from trame.ui.quasar import QLayout
 from trame.widgets import quasar, html, client, rca
 
 from .assets import ASSETS
-from .ui import VideoControls
+from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
 from .utils import VideoAdapter
 
 # make sure you source setup_KWIVER.sh from kwiver build directory
@@ -166,6 +166,57 @@ class BurnOutApp:
             self.ctrl.toggle_fullscreen()
 
     # -------------------------------------------------------------------------
+    # Menu handler
+    # -------------------------------------------------------------------------
+
+    def on_menu_file_open(self):
+        self.open_file()
+
+    def on_menu_file_export_meta(self):
+        print("on_menu_file_export_meta")
+
+    def on_menu_file_export_klv(self):
+        print("on_menu_file_export_klv")
+
+    def on_menu_file_remove_burnin(self):
+        print("on_menu_file_remove_burnin")
+
+    def on_menu_file_cancel(self):
+        print("on_menu_file_cancel")
+
+    def on_menu_file_quit(self):
+        print("on_menu_file_quit")
+
+    def on_menu_view_play(self):
+        self.state.video_playing = not self.state.video_playing
+
+    def on_menu_view_loop(self):
+        self.state.video_play_loop = not self.state.video_play_loop
+
+    def on_menu_view_reset(self):
+        print("on_menu_view_reset")
+
+    def on_menu_view_toggle_meta(self):
+        self.state.show_view_metadata = not self.state.show_view_metadata
+        if self.state.show_view_metadata:
+            self.state.split_meta = 20
+        else:
+            self.state.split_meta = 0
+
+    def on_menu_view_toggle_log(self):
+        self.state.show_view_log = not self.state.show_view_log
+        if self.state.show_view_log:
+            self.state.split_log = 70
+        else:
+            self.state.split_log = 100
+
+    def on_menu_help_manual(self):
+        print("on_menu_help_manual")
+
+    def on_menu_help_about(self):
+        print("on_menu_help_about")
+
+    # -------------------------------------------------------------------------
     # Async tasks
     # -------------------------------------------------------------------------
 
@@ -198,9 +249,9 @@ class BurnOutApp:
         self.video_adapter.update_frame(self.video_source.frame_image())
         self.metadata = self.video_source.frame_metadata()
         print(self.metadata)
-        for key,value in self.metadata[0]:
-          pretty_key = tag_traits_by_tag(key).name()
-          print(pretty_key,value.as_string())
+        for key, value in self.metadata[0]:
+            pretty_key = tag_traits_by_tag(key).name()
+            print(pretty_key, value.as_string())
 
     @change("video_playing")
     def on_video_playing(self, video_playing, **kwargs):
@@ -247,21 +298,78 @@ class BurnOutApp:
                         quasar.QBtn(
                             dense=True, flat=True, icon="close", click=self.exit
                         )
+                with quasar.QBar(
+                    classes="bg-blue-grey-2 text-grey-10 q-pa-sm q-pl-md row items-center"
+                ):
+                    FileMenu(
+                        self.on_menu_file_open,
+                        self.on_menu_file_export_meta,
+                        self.on_menu_file_export_klv,
+                        self.on_menu_file_remove_burnin,
+                        self.on_menu_file_cancel,
+                        self.on_menu_file_quit,
+                    )
+                    ViewMenu(
+                        self.on_menu_view_play,
+                        self.on_menu_view_loop,
+                        self.on_menu_view_reset,
+                        self.on_menu_view_toggle_meta,
+                        self.on_menu_view_toggle_log,
+                    )
+                    HelpMenu(
+                        self.on_menu_help_manual,
+                        self.on_menu_help_about,
+                    )
 
             with quasar.QPageContainer():
                 with quasar.QPage():
-                    with quasar.QCard(
-                        classes="absolute column justify-between content-stretch",
-                        style="top: 1rem; left: 1rem; bottom: 1rem; right: 1rem;",
+                    with quasar.QSplitter(
+                        v_model=("split_log", 100),
+                        horizontal=True,
+                        style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
+                        limits=([50, 100],),
+                        separator_style="opacity: 0;",
                     ):
-                        with html.Div(
-                            classes="col justify-center items-center q-pa-xs"
-                        ):
-                            rca.RawImageDisplayArea(
-                                name=VIDEO_ADAPTER_NAME,
-                                style="object-fit: contain;",
-                                classes="fit",
-                            )
-                        VideoControls(classes="q-px-md")
+                        with html.Template(raw_attrs=["v-slot:before"]):
+                            with quasar.QSplitter(
+                                v_model=("split_meta", 0),
+                                style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
+                                limits=([0, 50],),
+                                separator_style="opacity: 0;",
+                            ):
+                                with html.Template(raw_attrs=["v-slot:before"]):
+                                    with quasar.QCard(
+                                        flat=True,
+                                        bordered=True,
+                                        v_show=("show_view_metadata", False),
+                                        classes="absolute column justify-between content-stretch",
+                                        style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                                    ):
+                                        html.Div("meta")
+                                with html.Template(raw_attrs=["v-slot:after"]):
+                                    with quasar.QCard(
+                                        flat=True,
+                                        bordered=True,
+                                        classes="absolute column justify-between content-stretch",
+                                        style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                                    ):
+                                        with html.Div(
+                                            classes="col justify-center items-center q-pa-xs"
+                                        ):
+                                            rca.RawImageDisplayArea(
+                                                name=VIDEO_ADAPTER_NAME,
+                                                style="object-fit: contain;",
+                                                classes="fit",
+                                            )
+                                        VideoControls(classes="q-px-md")
 
+                        with html.Template(raw_attrs=["v-slot:after"]):
+                            with quasar.QCard(
+                                flat=True,
+                                bordered=True,
+                                v_show=("show_view_log", False),
+                                classes="absolute column justify-between content-stretch",
+                                style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                            ):
+                                html.Div("log")
             self.ui = layout
