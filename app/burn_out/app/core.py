@@ -186,7 +186,7 @@ class BurnOutApp:
         print("on_menu_file_cancel")
 
     def on_menu_file_quit(self):
-        print("on_menu_file_quit")
+        self.exit()
 
     def on_menu_view_play(self):
         self.state.video_playing = not self.state.video_playing
