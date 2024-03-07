@@ -22,7 +22,7 @@ class VideoControls(html.Div):
         with self:
             quasar.QSlider(
                 classes="col-8",
-                v_model=(current_frame, 0),
+                v_model=(current_frame, 1),
                 min=(1,),
                 max=(n_frames, 1),
                 step=(1,),
@@ -35,7 +35,7 @@ class VideoControls(html.Div):
             )
             quasar.QInput(
                 classes="col",
-                v_model_number=(current_frame, 0),
+                v_model_number=(current_frame, 1),
                 outlined=True,
                 type="number",
                 dense=True,
