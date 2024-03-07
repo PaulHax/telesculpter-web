@@ -16,6 +16,10 @@ from .utils import VideoAdapter
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
 from kwiver.vital.types import tag_traits_by_tag
+import kwiver
+PLUGIN_PATH=Path(str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms").resolve()
+import os
+os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
 
 
 import logging
