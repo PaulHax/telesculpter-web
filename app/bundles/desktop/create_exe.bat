@@ -1,7 +1,12 @@
 python -m PyInstaller ^
-  --hidden-import pkgutil ^
   --windowed ^
-  --collect-data trame_vuetify ^
-  --collect-data trame_vtk ^
+  --hidden-import pkgutil ^
+  --hidden-import kwiver.vital.plugins ^
+  --hidden-import numpy ^
+  --hidden-import pkgutil ^
+  --collect-data trame_quasar ^
+  --collect-data trame_rca ^
   --collect-data trame_client ^
-  .\run.py
+  --collect-data burn_out ^
+  --collect-data kwiver ^
+  .\burn-out.py

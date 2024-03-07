@@ -3,8 +3,12 @@
 python -m PyInstaller \
     --clean --noconfirm \
     --windowed \
+    --hidden-import kwiver.vital.plugins \
+    --hidden-import numpy \
     --hidden-import pkgutil \
-    --collect-data trame_vuetify \
-    --collect-data trame_vtk \
+    --collect-data trame_quasar \
+    --collect-data trame_rca \
     --collect-data trame_client \
-    ./run.py
+    --collect-data burn_out \
+    --collect-data kwiver \
+    "$CURRENT_DIR/burn-out.py"

@@ -19,7 +19,6 @@ PLUGIN_PATH = Path(
     str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms"
 ).resolve()
 os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
-print(PLUGIN_PATH)
 
 # make sure you source setup_KWIVER.sh from kwiver build directory
 # before running the script to set the paths appropriately
