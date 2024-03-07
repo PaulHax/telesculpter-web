@@ -1,4 +1,6 @@
+import os
 import asyncio
+import logging
 from pathlib import Path
 from tkinter import filedialog, Tk, TclError
 
@@ -11,23 +13,26 @@ from .assets import ASSETS
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
 from .utils import VideoAdapter
 
+import kwiver
+
+PLUGIN_PATH = Path(
+    str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms"
+).resolve()
+os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
+print(PLUGIN_PATH)
+
 # make sure you source setup_KWIVER.sh from kwiver build directory
 # before running the script to set the paths appropriately
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
 from kwiver.vital.types import tag_traits_by_tag
-import kwiver
-PLUGIN_PATH=Path(str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms").resolve()
-import os
-os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
 
-
-import logging
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 VIDEO_ADAPTER_NAME = "active-video"
+
 
 # this is for using native open file dialog
 # https://stackoverflow.com/a/68230970
