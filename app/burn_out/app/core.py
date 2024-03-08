@@ -308,6 +308,7 @@ class BurnOutApp:
 
     def _build_ui(self, *args, **kwargs):
         with QLayout(self.server, view="hHh lpR fFf") as layout:
+            client.Style("html { overflow: hidden; }")
             self.ctrl.toggle_fullscreen = client.JSEval(
                 exec="""
                 if (!window.document.fullscreenElement) {
