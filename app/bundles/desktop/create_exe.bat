@@ -2,6 +2,7 @@ python -m PyInstaller ^
   --windowed ^
   --hidden-import pkgutil ^
   --hidden-import kwiver.vital.plugins ^
+  --hidden-import kwiver.vital.plugins.discovery ^
   --hidden-import numpy ^
   --hidden-import pkgutil ^
   --collect-data trame_quasar ^
