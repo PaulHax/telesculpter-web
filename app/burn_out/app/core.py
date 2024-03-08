@@ -14,11 +14,28 @@ from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
 from .utils import VideoAdapter
 
 import kwiver
+import platform
 
-PLUGIN_PATH = Path(
-    str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms"
-).resolve()
-os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
+if platform.system() == "Linux":
+
+    PLUGIN_PATH = Path(
+        str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms"
+    ).resolve()
+    os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
+if platform.system() == "Windows":
+    BASE_PATH = str(Path(str(kwiver.__path__[0])))
+    PLUGIN_PATH = Path(BASE_PATH + "\\lib\\kwiver\\plugins").resolve()
+    os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
+    os.environ["PATH"] = (
+        str(Path(BASE_PATH + "\\bin").resolve()) + os.pathsep + os.environ["PATH"]
+    )
+    os.environ["PATH"] = (
+        str(Path(BASE_PATH + "..\kwiver.libs").resolve())
+        + os.pathsep
+        + os.environ["PATH"]
+    )
+
+print(PLUGIN_PATH)
 
 # make sure you source setup_KWIVER.sh from kwiver build directory
 # before running the script to set the paths appropriately
