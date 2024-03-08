@@ -150,6 +150,8 @@ class BurnOutApp:
             file_to_load = filedialog.askopenfile(
                 title="Select video to load",
             )
+            if file_to_load is None:
+                return
             file_to_load = file_to_load.name
             # TODO not sure how to get string from TExtIO object from above
             # file_to_load = webview_file_dialog()
