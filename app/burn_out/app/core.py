@@ -82,6 +82,7 @@ class BurnOutApp:
         self.state.trame__favicon = ASSETS.favicon
         self.state.video_loaded = False
         self.state.ui_meta = []
+        self.state.video_play_speed_label = ""
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
@@ -256,9 +257,17 @@ class BurnOutApp:
     # -------------------------------------------------------------------------
 
     async def _play(self):
+        def speed_to_fps(speed):
+            # see https://gitlab.kitware.com/kwiver/burnout/-/blob/master/gui/MainWindow.cxx?ref_type=heads#L1043
+            return 2.0 ** (speed * 0.1)
+
         while self.state.video_playing:
+            fps = speed_to_fps(self.state.video_play_speed)
+            # self.state.video_play_speed_label = f"{round(fps)} fps" enable once we match the reported fps
             await asyncio.sleep(
-                1 / (self.video_fps * float(self.state.video_play_speed))
+                # 1 / (self.video_fps * tranform_play_speed(self.state.video_play_speed))
+                1
+                / fps
             )
             with self.state:
                 if self.state.video_current_frame < self.state.video_n_frames:

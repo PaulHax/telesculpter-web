@@ -9,6 +9,7 @@ class VideoControls(html.Div):
         n_frames="video_n_frames",
         play_status="video_playing",
         play_speed="video_play_speed",
+        play_speed_label="video_play_speed_label",
         play_loop="video_play_loop",
         classes="",
         **kwargs,
@@ -59,20 +60,21 @@ class VideoControls(html.Div):
             )
             quasar.QSlider(
                 classes="col",
-                v_model=(play_speed, 1),
-                min=(0.25,),
-                max=(2,),
-                step=(0.25,),
+                v_model=(play_speed, 60),
+                min=(-20,),
+                max=(60,),
+                step=(1,),
                 markers=True,
                 snap=True,
                 track_size="25px",
                 thumb_size="5px",
             )
-            html.Div(
-                f"x {{{{ {play_speed}.toFixed(2) }}}}",
-                classes="text-right",
-                style="width: 50px;",
-            )
+            # enable once the reported fps matches the actual performance
+            # html.Div(
+            #    f"{{{{ {play_speed_label} }}}}",
+            #    classes="text-right",
+            #    style="width: 50px;",
+            # )
 
 
 class FileMenu(html.Div):
