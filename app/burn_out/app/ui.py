@@ -119,6 +119,7 @@ class FileMenu(html.Div):
                                     clickable=True,
                                     **close_popup,
                                     click=on_menu_file_export_meta,
+                                    disable=True,
                                 ):
                                     quasar.QItemSection(
                                         "Metadata...",
@@ -128,6 +129,7 @@ class FileMenu(html.Div):
                                     clickable=True,
                                     **close_popup,
                                     click=on_menu_file_export_klv,
+                                    disable=True,
                                 ):
                                     quasar.QItemSection(
                                         "KLV Packets...",
@@ -137,6 +139,7 @@ class FileMenu(html.Div):
                         clickable=True,
                         **close_popup,
                         click=on_menu_file_remove_burnin,
+                        disable=True,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
                             # quasar.QIcon(name="description", size="xs")
@@ -149,6 +152,7 @@ class FileMenu(html.Div):
                         clickable=True,
                         **close_popup,
                         click=on_menu_file_cancel,
+                        disable=True,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
                             quasar.QIcon(name="do_not_disturb_alt", size="xs")
@@ -208,6 +212,7 @@ class ViewMenu(html.Div):
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_view_reset,
+                        disable=True,
                         **close_popup,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
@@ -219,6 +224,7 @@ class ViewMenu(html.Div):
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_view_reset,
+                        disable=True,
                         **close_popup,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
@@ -245,6 +251,7 @@ class ViewMenu(html.Div):
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_view_toggle_log,
+                        disable=True,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
                             quasar.QIcon(
@@ -273,6 +280,7 @@ class HelpMenu(html.Div):
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_help_manual,
+                        disable=True,
                         **close_popup,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
@@ -285,6 +293,7 @@ class HelpMenu(html.Div):
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_help_about,
+                        disable=True,
                         **close_popup,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
