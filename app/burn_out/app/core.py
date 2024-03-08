@@ -85,7 +85,7 @@ class BurnOutApp:
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
-        self.video_source = VideoInput.create("ffmpeg")
+        self.video_source = None
         self.video_fps = 30
 
         # Tk: native file dialog
@@ -155,15 +155,22 @@ class BurnOutApp:
             # file_to_load = webview_file_dialog()
 
         logger.debug(f" => {file_to_load=}")
-        self.video_source.open(file_to_load)
-        self.state.video_loaded = True
+        if self.video_source:
+            self.video_source.close()
+            self.state.video_loaded = False
 
-        # Update state for UI
-        self.state.video_n_frames = self.video_source.num_frames()
-        video_fps = self.video_source.frame_rate()
-        if video_fps != -1.0:
-            print(f"{video_fps=}")
-            self.video_fps = video_fps
+        with self.state as state:
+            self.video_source = VideoInput.create("ffmpeg")
+            self.video_source.open(file_to_load)
+            state.video_loaded = True
+
+            # Update state for UI
+            state.video_current_frame = 1
+            state.video_n_frames = self.video_source.num_frames()
+            video_fps = self.video_source.frame_rate()
+            if video_fps != -1.0:
+                print(f"{video_fps=}")
+                self.video_fps = video_fps
 
     @controller.set("on_desktop_msg")
     def desktop_msg(self, msg):
