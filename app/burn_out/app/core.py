@@ -16,11 +16,6 @@ from .utils import VideoAdapter
 import kwiver
 import platform
 
-if platform.system() == "Linux":
-    PLUGIN_PATH = Path(
-        str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms"
-    ).resolve()
-    os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
 if platform.system() == "Windows":
     BASE_PATH = str(Path(str(kwiver.__path__[0])))
     PLUGIN_PATH = Path(BASE_PATH + "\\lib\\kwiver\\plugins").resolve()
@@ -34,13 +29,13 @@ if platform.system() == "Windows":
         + os.environ["PATH"]
     )
 
-print(PLUGIN_PATH)
-
-# make sure you source setup_KWIVER.sh from kwiver build directory
-# before running the script to set the paths appropriately
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
 from kwiver.vital.types import tag_traits_by_tag
+from kwiver.vital import plugin_management
+
+vpm = plugin_management.plugin_manager_instance()
+vpm.load_all_plugins()
 
 
 logger = logging.getLogger(__name__)
