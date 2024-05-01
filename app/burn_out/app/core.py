@@ -17,7 +17,6 @@ import kwiver
 import platform
 
 if platform.system() == "Linux":
-
     PLUGIN_PATH = Path(
         str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms"
     ).resolve()
@@ -154,13 +153,12 @@ class BurnOutApp:
             if file_to_load is None:
                 return
             file_to_load = file_to_load.name
-            # TODO not sure how to get string from TExtIO object from above
-            # file_to_load = webview_file_dialog()
 
         logger.debug(f" => {file_to_load=}")
         if self.video_source:
             self.video_source.close()
             self.state.video_loaded = False
+            self.video_adapter.clear()
 
         with self.state as state:
             self.video_source = VideoInput.create("ffmpeg")
