@@ -9,7 +9,7 @@ from trame.decorators import TrameApp, change, controller, life_cycle
 from trame.ui.quasar import QLayout
 from trame.widgets import quasar, html, client, rca
 
-from .assets import ASSETS
+from .assets import ASSETS, KWIVER_CONFIG
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
 from .utils import VideoAdapter
 
@@ -156,7 +156,10 @@ class BurnOutApp:
             self.video_adapter.clear()
 
         with self.state as state:
-            self.video_source = VideoInput.create("ffmpeg")
+            self.video_source = VideoInput.set_nested_algo_configuration(
+                "video_reader",
+                read_config_file(KWIVER_CONFIG["gui_image_video_reader"]),
+            )
             self.video_source.open(file_to_load)
             state.video_loaded = True
 
