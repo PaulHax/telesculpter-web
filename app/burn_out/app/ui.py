@@ -121,7 +121,6 @@ class FileMenu(html.Div):
                                     clickable=True,
                                     **close_popup,
                                     click=on_menu_file_export_meta,
-                                    disable=True,
                                 ):
                                     quasar.QItemSection(
                                         "Metadata...",

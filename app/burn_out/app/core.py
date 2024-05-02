@@ -12,6 +12,8 @@ from trame.widgets import quasar, html, client, rca
 from .assets import ASSETS, KWIVER_CONFIG
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
 from .utils import VideoAdapter
+from .video_importer import VideoImporter
+
 
 import kwiver
 import platform
@@ -31,6 +33,7 @@ if platform.system() == "Windows":
 
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
+from kwiver.vital.config import read_config_file
 from kwiver.vital.types import tag_traits_by_tag
 from kwiver.vital import plugin_management
 
@@ -82,6 +85,7 @@ class BurnOutApp:
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
         self.video_source = None
         self.video_fps = 30
+        self.video_importer = VideoImporter()
 
         # Tk: native file dialog
         try:
@@ -139,6 +143,18 @@ class BurnOutApp:
     # Desktop app helpers
     # -------------------------------------------------------------------------
 
+    def save_metadata(self):
+        logger.debug("menu:save_metadata")
+        filename = filedialog.asksaveasfilename(
+            filetypes=(
+                ("Comma-Separated Values", "*.csv"),
+                ("JavaScript Object Notation", "*.json"),
+            ),
+            defaultextension=".csv",
+        )
+        print("call importer")
+        self.video_importer.write(filename, KWIVER_CONFIG["gui_metadata_writer"])
+
     def open_file(self, file_to_load=None):
         logger.debug("open file")
         if file_to_load is None:
@@ -154,6 +170,8 @@ class BurnOutApp:
             self.video_source.close()
             self.state.video_loaded = False
             self.video_adapter.clear()
+        # start extractting metadata in separate process
+        self.video_importer.run(file_to_load, KWIVER_CONFIG["gui_image_video_reader"])
 
         with self.state as state:
             self.video_source = VideoInput.set_nested_algo_configuration(
@@ -190,6 +208,7 @@ class BurnOutApp:
             self.ctrl.pywebview_window_call("destroy")
         else:
             asynchronous.create_task(self.server.stop())
+        self.video_importer.close()
 
     def maximize(self):
         if self.ctrl.pywebview_window_call.exists():
@@ -205,7 +224,8 @@ class BurnOutApp:
         self.open_file()
 
     def on_menu_file_export_meta(self):
-        print("on_menu_file_export_meta")
+        print("on_menu_save_metadata")
+        self.save_metadata()
 
     def on_menu_file_export_klv(self):
         print("on_menu_file_export_klv")
