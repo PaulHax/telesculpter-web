@@ -47,25 +47,6 @@ logger.setLevel(logging.DEBUG)
 VIDEO_ADAPTER_NAME = "active-video"
 
 
-# this is for using native open file dialog
-# https://stackoverflow.com/a/68230970
-# def webview_file_dialog():
-#     file = None
-#     def open_file_dialog(w):
-#         nonlocal file
-#         try:
-#             file = w.create_file_dialog(webview.OPEN_DIALOG)[0]
-#         except TypeError:
-#             pass  # user exited file dialog without picking
-#         finally:
-#             w.destroy()
-#     #https://pywebview.flowrl.com/examples/open_file_dialog.html
-#     window = webview.create_window("", hidden=True)
-#     webview.start(open_file_dialog, window)
-#     # file will either be a string or None
-#     return file
-
-
 @TrameApp()
 class BurnOutApp:
     def __init__(self, server=None):
@@ -196,10 +177,8 @@ class BurnOutApp:
             self.open_file()
         elif msg == "menu:exit":
             self.exit()
-        elif msg == "menu:frame-num":
-            self.get_number_of_frames()
-        elif msg == "menu:ith-num":
-            self.ith_frame()
+        elif msg == "closing":
+            self.video_importer.close()
         else:
             print(f"Desktop msg: {msg}")
 
