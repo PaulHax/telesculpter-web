@@ -130,7 +130,6 @@ class FileMenu(html.Div):
                                     clickable=True,
                                     **close_popup,
                                     click=on_menu_file_export_klv,
-                                    disable=True,
                                 ):
                                     quasar.QItemSection(
                                         "KLV Packets...",

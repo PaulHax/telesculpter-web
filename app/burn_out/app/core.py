@@ -132,9 +132,20 @@ class BurnOutApp:
                 ("JavaScript Object Notation", "*.json"),
             ),
             defaultextension=".csv",
+            title="Save Metadata",
         )
-        print("call importer")
-        self.video_importer.write(filename, KWIVER_CONFIG["gui_metadata_writer"])
+        if filename:
+            self.video_importer.write(filename, KWIVER_CONFIG["gui_metadata_writer"])
+
+    def save_klv(self):
+        logger.debug("menu:save_klv")
+        filename = filedialog.asksaveasfilename(
+            filetypes=(("JavaScript Object Notation", "*.json"),),
+            defaultextension=".json",
+            title="Save KLV",
+        )
+        if filename:
+            self.video_importer.write(filename, KWIVER_CONFIG["gui_klv_writer"])
 
     def open_file(self, file_to_load=None):
         logger.debug("open file")
@@ -203,11 +214,10 @@ class BurnOutApp:
         self.open_file()
 
     def on_menu_file_export_meta(self):
-        print("on_menu_save_metadata")
         self.save_metadata()
 
     def on_menu_file_export_klv(self):
-        print("on_menu_file_export_klv")
+        self.save_klv()
 
     def on_menu_file_remove_burnin(self):
         print("on_menu_file_remove_burnin")
