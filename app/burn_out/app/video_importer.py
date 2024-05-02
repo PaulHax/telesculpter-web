@@ -15,8 +15,12 @@ class VideoImporter:
     def __init__(self):
         self.task_handle = None
         self.task_queue = Queue()
-        self.process = Process(target=_worker, args=(self.task_queue,))
-        self.process.start()
+        self.process = self._spawn_new_process()
+
+    def _spawn_new_process(self):
+        process = Process(target=_worker, args=(self.task_queue,))
+        process.start()
+        return process
 
     def run(self, video_path, config_path):
         """Extract metadata from the video given in video_path using a reader
@@ -27,8 +31,17 @@ class VideoImporter:
         """Write previously extracted data to path"""
         self.task_queue.put((_write, (path, config_path)))
 
+    def cancel(self):
+        """Terminate the process
+        Note: this aborts any running tasks"""
+        self.process.terminate()
+        self.task_queue = Queue()
+        self.process = self._spawn_new_process()
+
     def close(self):
-        """Terminate the process"""
+        """Close the process loop.
+        Note: The process will terminate once all of its current tasks are
+        completed"""
         self.task_queue.put(None)
 
 
@@ -42,6 +55,7 @@ def _worker(queue):
                 func(data, *args)
             else:
                 logger.warning("No metadata to write")
+                print("No metadata to write")
         else:
             raise RuntimeError("Unhandled worker function")
     print("worker_done")

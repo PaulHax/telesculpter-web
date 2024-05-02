@@ -152,7 +152,6 @@ class FileMenu(html.Div):
                         clickable=True,
                         **close_popup,
                         click=on_menu_file_cancel,
-                        disable=True,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
                             quasar.QIcon(name="do_not_disturb_alt", size="xs")

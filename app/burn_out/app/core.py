@@ -36,6 +36,7 @@ from kwiver.vital.types import Timestamp
 from kwiver.vital.config import read_config_file
 from kwiver.vital.types import tag_traits_by_tag
 from kwiver.vital import plugin_management
+from kwiver.vital.config import read_config_file
 
 vpm = plugin_management.plugin_manager_instance()
 vpm.load_all_plugins()
@@ -45,6 +46,13 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 VIDEO_ADAPTER_NAME = "active-video"
+
+
+def pick_video_reader_config(path):
+    if Path(path).suffix == ".txt":
+        return KWIVER_CONFIG["gui_image_list_reader"]
+    else:
+        return KWIVER_CONFIG["gui_image_video_reader"]
 
 
 @TrameApp()
@@ -163,12 +171,11 @@ class BurnOutApp:
             self.state.video_loaded = False
             self.video_adapter.clear()
         # start extractting metadata in separate process
-        self.video_importer.run(file_to_load, KWIVER_CONFIG["gui_image_video_reader"])
+        self.video_importer.run(file_to_load, pick_video_reader_config(file_to_load))
 
         with self.state as state:
             self.video_source = VideoInput.set_nested_algo_configuration(
-                "video_reader",
-                read_config_file(KWIVER_CONFIG["gui_image_video_reader"]),
+                "video_reader", read_config_file(pick_video_reader_config(file_to_load))
             )
             self.video_source.open(file_to_load)
             state.video_loaded = True
@@ -206,6 +213,9 @@ class BurnOutApp:
         else:
             self.ctrl.toggle_fullscreen()
 
+    def cancel(self):
+        self.video_importer.cancel()
+
     # -------------------------------------------------------------------------
     # Menu handler
     # -------------------------------------------------------------------------
@@ -223,7 +233,7 @@ class BurnOutApp:
         print("on_menu_file_remove_burnin")
 
     def on_menu_file_cancel(self):
-        print("on_menu_file_cancel")
+        self.cancel()
 
     def on_menu_file_quit(self):
         self.exit()
