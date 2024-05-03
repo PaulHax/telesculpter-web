@@ -47,6 +47,17 @@ logger.setLevel(logging.DEBUG)
 
 VIDEO_ADAPTER_NAME = "active-video"
 
+SUPPORTED_VIDEO_FORMATS = (
+    ("MPEG Video", "*.mpeg"),
+    ("MPG Video", "*.mpg"),
+    ("MP4 Video", "*.mp4"),
+    ("AVI Video", "*.avi"),
+    ("Windows Media Video", "*.wmv"),
+    ("QuickTime Video", "*.mov"),
+    ("MPEG Transport Stream", "*.ts"),
+    ("Image List", "*.txt"),
+)
+
 
 def pick_video_reader_config(path):
     if Path(path).suffix == ".txt":
@@ -160,6 +171,14 @@ class BurnOutApp:
         if file_to_load is None:
             file_to_load = filedialog.askopenfile(
                 title="Select video to load",
+                filetypes=(
+                    (
+                        "All supported Video Files",
+                        " ".join(ext for _, ext in SUPPORTED_VIDEO_FORMATS),
+                    ),
+                    ("All files", "*.*"),
+                    *SUPPORTED_VIDEO_FORMATS,
+                ),
             )
             if file_to_load is None:
                 return
