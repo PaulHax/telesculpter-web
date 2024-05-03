@@ -85,6 +85,7 @@ class BurnOutApp:
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
         self.video_source = None
         self.video_fps = 30
+        self.video_previous_frame_index = -1
         self.video_importer = VideoImporter()
 
         # Tk: native file dialog
@@ -189,6 +190,7 @@ class BurnOutApp:
             self.video_source.close()
             self.state.video_loaded = False
             self.video_adapter.clear()
+            self.video_previous_frame_index = -1
         # start extractting metadata in separate process
         self.video_importer.run(file_to_load, pick_video_reader_config(file_to_load))
 
@@ -323,8 +325,23 @@ class BurnOutApp:
         video_current_frame = int(video_current_frame)
         ts = Timestamp()
 
-        self.video_source.seek_frame(ts, video_current_frame)
+        if self.video_previous_frame_index != video_current_frame:
+            # step through next frames if the requested frame is just a few ahead
+            if (
+                self.video_previous_frame_index < video_current_frame
+                and self.video_previous_frame_index + 10 > video_current_frame
+            ):
+                while (
+                    self.video_source.next_frame(ts)
+                    and ts.get_frame() < video_current_frame
+                ):
+                    continue
+            else:
+                # otherwise seek to the requested frame
+                self.video_source.seek_frame(ts, video_current_frame)
+
         self.video_adapter.update_frame(self.video_source.frame_image())
+        self.video_previous_frame_index = video_current_frame
         self.metadata = self.video_source.frame_metadata()
         self.state.ui_meta = [
             dict(name=tag_traits_by_tag(key).name(), value=value.as_string())
