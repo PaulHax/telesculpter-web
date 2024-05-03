@@ -17,7 +17,6 @@ import kwiver
 import platform
 
 if platform.system() == "Linux":
-
     PLUGIN_PATH = Path(
         str(Path(kwiver.__file__).parent) + "/lib/kwiver/plugins/algorithms"
     ).resolve()
@@ -82,10 +81,11 @@ class BurnOutApp:
         self.state.trame__favicon = ASSETS.favicon
         self.state.video_loaded = False
         self.state.ui_meta = []
+        self.state.video_play_speed_label = ""
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
-        self.video_source = VideoInput.create("ffmpeg")
+        self.video_source = None
         self.video_fps = 30
 
         # Tk: native file dialog
@@ -150,20 +150,28 @@ class BurnOutApp:
             file_to_load = filedialog.askopenfile(
                 title="Select video to load",
             )
+            if file_to_load is None:
+                return
             file_to_load = file_to_load.name
-            # TODO not sure how to get string from TExtIO object from above
-            # file_to_load = webview_file_dialog()
 
         logger.debug(f" => {file_to_load=}")
-        self.video_source.open(file_to_load)
-        self.state.video_loaded = True
+        if self.video_source:
+            self.video_source.close()
+            self.state.video_loaded = False
+            self.video_adapter.clear()
 
-        # Update state for UI
-        self.state.video_n_frames = self.video_source.num_frames()
-        video_fps = self.video_source.frame_rate()
-        if video_fps != -1.0:
-            print(f"{video_fps=}")
-            self.video_fps = video_fps
+        with self.state as state:
+            self.video_source = VideoInput.create("ffmpeg")
+            self.video_source.open(file_to_load)
+            state.video_loaded = True
+
+            # Update state for UI
+            state.video_current_frame = 1
+            state.video_n_frames = self.video_source.num_frames()
+            video_fps = self.video_source.frame_rate()
+            if video_fps != -1.0:
+                print(f"{video_fps=}")
+                self.video_fps = video_fps
 
     @controller.set("on_desktop_msg")
     def desktop_msg(self, msg):
@@ -247,9 +255,17 @@ class BurnOutApp:
     # -------------------------------------------------------------------------
 
     async def _play(self):
+        def speed_to_fps(speed):
+            # see https://gitlab.kitware.com/kwiver/burnout/-/blob/master/gui/MainWindow.cxx?ref_type=heads#L1043
+            return 2.0 ** (speed * 0.1)
+
         while self.state.video_playing:
+            fps = speed_to_fps(self.state.video_play_speed)
+            # self.state.video_play_speed_label = f"{round(fps)} fps" enable once we match the reported fps
             await asyncio.sleep(
-                1 / (self.video_fps * float(self.state.video_play_speed))
+                # 1 / (self.video_fps * tranform_play_speed(self.state.video_play_speed))
+                1
+                / fps
             )
             with self.state:
                 if self.state.video_current_frame < self.state.video_n_frames:
@@ -290,6 +306,7 @@ class BurnOutApp:
 
     def _build_ui(self, *args, **kwargs):
         with QLayout(self.server, view="hHh lpR fFf") as layout:
+            client.Style("html { overflow: hidden; }")
             self.ctrl.toggle_fullscreen = client.JSEval(
                 exec="""
                 if (!window.document.fullscreenElement) {

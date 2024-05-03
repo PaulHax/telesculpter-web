@@ -7,6 +7,9 @@ class VideoAdapter:
     def set_streamer(self, stream_manager):
         self.streamer = stream_manager
 
+    def clear(self):
+        self.meta = None
+
     def update_frame(self, kwiver_image):
         if self.meta is None:
             self.meta = dict(
