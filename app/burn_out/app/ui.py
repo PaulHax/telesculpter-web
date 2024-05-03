@@ -40,6 +40,7 @@ class VideoControls(html.Div):
                 outlined=True,
                 type="number",
                 dense=True,
+                style="min-width:60px",
             )
             quasar.QSeparator(vertical=True)
             quasar.QBtn(
