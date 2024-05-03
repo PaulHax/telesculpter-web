@@ -251,7 +251,6 @@ class ViewMenu(html.Div):
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_view_toggle_log,
-                        disable=True,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
                             quasar.QIcon(

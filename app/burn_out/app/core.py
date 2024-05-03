@@ -17,6 +17,7 @@ from .video_importer import VideoImporter
 
 import kwiver
 import platform
+from io import StringIO
 
 if platform.system() == "Windows":
     BASE_PATH = str(Path(str(kwiver.__path__[0])))
@@ -42,8 +43,26 @@ vpm = plugin_management.plugin_manager_instance()
 vpm.load_all_plugins()
 
 
-logger = logging.getLogger(__name__)
+#  anything written to objects of this calss will be also appended to
+#  log_stream state variable
+class RedirectedStringIO(StringIO):
+    def __init__(self, state, *args):
+        super().__init__(*args)
+        self.state = state
+        # don't buffer
+        self.write_through = True
+
+    def write(self, msg):
+        self.state.log_stream += msg
+        v = super().write(msg)
+        return v
+
+
+from kwiver.vital import vital_logging
+
+logger = vital_logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
 
 VIDEO_ADAPTER_NAME = "active-video"
 
@@ -80,6 +99,9 @@ class BurnOutApp:
         self.state.video_loaded = False
         self.state.ui_meta = []
         self.state.video_play_speed_label = ""
+        self.state.log_stream = ""
+        self.iostream = RedirectedStringIO(self.state)
+        logging.basicConfig(stream=self.iostream)
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
@@ -498,5 +520,8 @@ class BurnOutApp:
                                 classes="absolute column justify-between content-stretch",
                                 style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
                             ):
-                                html.Div("log")
+                                html.Div(
+                                    style="white-space: pre-line;",
+                                    v_text=("log_stream", "Empty"),
+                                )
             self.ui = layout
