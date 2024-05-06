@@ -1,4 +1,5 @@
 from .core import BurnOutApp
+from multiprocessing import freeze_support
 
 
 def main(server=None, **kwargs):
@@ -33,4 +34,5 @@ def app():
 
 
 if __name__ == "__main__":
+    freeze_support()
     main()
