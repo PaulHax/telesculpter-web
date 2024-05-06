@@ -471,7 +471,7 @@ class BurnOutApp:
                                             hide_header=True,
                                             hide_bottom=True,
                                             separator="cell",
-                                            rowsPerPage=(10000,),
+                                            rows_per_page_options=0,
                                             rows=("ui_meta", []),
                                             columns=(
                                                 "ui_cols",
