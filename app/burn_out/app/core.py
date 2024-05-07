@@ -1,6 +1,7 @@
 import os
 import asyncio
 import logging
+from io import StringIO
 from pathlib import Path
 from tkinter import filedialog, Tk, TclError
 
@@ -13,24 +14,6 @@ from .assets import ASSETS, KWIVER_CONFIG
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
 from .utils import VideoAdapter
 from .video_importer import VideoImporter
-
-
-import kwiver
-import platform
-from io import StringIO
-
-if platform.system() == "Windows":
-    BASE_PATH = str(Path(str(kwiver.__path__[0])))
-    PLUGIN_PATH = Path(BASE_PATH + "\\lib\\kwiver\\plugins").resolve()
-    os.environ["KWIVER_PLUGIN_PATH"] = str(PLUGIN_PATH)
-    os.environ["PATH"] = (
-        str(Path(BASE_PATH + "\\bin").resolve()) + os.pathsep + os.environ["PATH"]
-    )
-    os.environ["PATH"] = (
-        str(Path(BASE_PATH + "..\kwiver.libs").resolve())
-        + os.pathsep
-        + os.environ["PATH"]
-    )
 
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
