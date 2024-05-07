@@ -2,6 +2,8 @@ from kwiver.vital.algo import VideoInput, MetadataMapIO
 from kwiver.vital.config import read_config_file
 from kwiver.vital.types import Timestamp, SimpleMetadataMap
 from pathlib import Path
+from kwiver.vital import plugin_management
+from kwiver.vital import vital_logging
 import logging
 from multiprocessing import Process, Queue
 
@@ -47,6 +49,8 @@ class VideoImporter:
 
 def _worker(queue):
     data = None
+    vpm = plugin_management.plugin_manager_instance()
+    vpm.load_all_plugins()
     for func, args in iter(queue.get, None):
         if func == _extract_metadata:
             data = func(*args)
