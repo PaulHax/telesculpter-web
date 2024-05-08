@@ -133,7 +133,7 @@ class BurnOutApp:
         # Load video if provided
         if self.cli_args.data:
             file_to_load = str(Path(self.cli_args.data).resolve())
-            print("Load file", file_to_load)
+            logger.debug("Load file", file_to_load)
             self.open_file(file_to_load)
 
         # Connect our video adapter
@@ -211,7 +211,6 @@ class BurnOutApp:
             state.video_n_frames = self.video_source.num_frames()
             video_fps = self.video_source.frame_rate()
             if video_fps != -1.0:
-                print(f"{video_fps=}")
                 self.video_fps = video_fps
 
     @controller.set("on_desktop_msg")
@@ -224,7 +223,7 @@ class BurnOutApp:
         elif msg == "closing":
             self.video_importer.close()
         else:
-            print(f"Desktop msg: {msg}")
+            logger.debug(f"Desktop msg: {msg}")
 
     def exit(self):
         if self.ctrl.pywebview_window_call.exists():
@@ -256,7 +255,7 @@ class BurnOutApp:
         self.save_klv()
 
     def on_menu_file_remove_burnin(self):
-        print("on_menu_file_remove_burnin")
+        logger.debug("on_menu_file_remove_burnin")
 
     def on_menu_file_cancel(self):
         self.cancel()
@@ -271,7 +270,7 @@ class BurnOutApp:
         self.state.video_play_loop = not self.state.video_play_loop
 
     def on_menu_view_reset(self):
-        print("on_menu_view_reset")
+        logger.debug("on_menu_view_reset")
 
     def on_menu_view_toggle_meta(self):
         self.state.show_view_metadata = not self.state.show_view_metadata
@@ -288,10 +287,10 @@ class BurnOutApp:
             self.state.split_log = 100
 
     def on_menu_help_manual(self):
-        print("on_menu_help_manual")
+        logger.debug("on_menu_help_manual")
 
     def on_menu_help_about(self):
-        print("on_menu_help_about")
+        logger.debug("on_menu_help_about")
 
     # -------------------------------------------------------------------------
     # Async tasks

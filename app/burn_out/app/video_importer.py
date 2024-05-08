@@ -7,7 +7,7 @@ from kwiver.vital import vital_logging
 import logging
 from multiprocessing import Process, Queue
 
-logger = logging.getLogger(__name__)
+logger = vital_logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
 
@@ -59,10 +59,8 @@ def _worker(queue):
                 func(data, *args)
             else:
                 logger.warning("No metadata to write")
-                print("No metadata to write")
         else:
             raise RuntimeError("Unhandled worker function")
-    print("worker_done")
 
 
 def _extract_metadata(video_path, config_path):
@@ -84,7 +82,7 @@ def _extract_metadata(video_path, config_path):
     #  return
 
     current_timestamp = Timestamp()
-    while video_reader.next_frame(current_timestamp):  # && !d->canceled)
+    while video_reader.next_frame(current_timestamp):
         if not current_timestamp.has_valid_frame():
             continue
 
@@ -94,15 +92,7 @@ def _extract_metadata(video_path, config_path):
         if len(metadata) > 0:
             frame_metadata[frame] = metadata
 
-    # if (d->canceled)
-    # {
-    #  // invalidate the metadata map
-    #  metadataMap = nullptr;
-    # }
-
-    # emit this->progressChanged(QString("Loading video complete"), 100);
-    # emit this->completed(metadataMap);
-    print("Done reading metadata")
+    logger.debug("Done reading metadata")
     return frame_metadata
 
 
@@ -115,8 +105,7 @@ def _write(data, metadata_path, config_path):
     config = read_config_file(config_path)
     config["metadata_writer:type"] = writer_type
 
-    #  config->set_value("metadata_writer:type", writer_type,
-    #                    "Type of serialization to use");
+    # TODO: check hwat this exactly does in C++
     #  d->freestandingConfig->merge_config(config);
     #
     try:
@@ -125,23 +114,8 @@ def _write(data, metadata_path, config_path):
         )
         if metadata_serializer is None:
             logger.error("Error saving metadata")
-        #    if (!metadataMapIO)
-        #    {
-        #      QMessageBox::critical(
-        #        this, QStringLiteral("Error saving metadata"),
-        #        QStringLiteral("Improper configuration settings. "
-        #                       "Please see the log."));
-        #      return;
-        #    }
         smm = SimpleMetadataMap(data)
         metadata_serializer.save(metadata_path, data=smm)
         logger.debug(f"Wrote metadata to {metadata_path}")
-        print("wrote_metadata")
     except Exception as error:
         logger.error(f"Error saving metadata \n {error}")
-
-
-#    QMessageBox::critical(
-#      this, QStringLiteral("Error saving metadata"),
-#      QStringLiteral("Failed to save metadata: ") +
-#      QString::fromLocal8Bit(e.what()));
