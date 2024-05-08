@@ -112,6 +112,19 @@ class BurnOutApp:
         self._build_ui()
 
     # -------------------------------------------------------------------------
+    # tauri helpers
+    # -------------------------------------------------------------------------
+
+    @life_cycle.server_ready
+    def _tauri_ready(self, **_):
+        logger.debug("_ready")
+        print(f"tauri-server-port={self.server.port}", flush=True)
+
+    @life_cycle.client_connected
+    def _tauri_show(self, **_):
+        print("tauri-client-ready", flush=True)
+
+    # -------------------------------------------------------------------------
     # trame helpers
     # -------------------------------------------------------------------------
 
