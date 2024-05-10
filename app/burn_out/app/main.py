@@ -1,5 +1,4 @@
 from .core import BurnOutApp
-from multiprocessing import freeze_support
 
 
 def main(server=None, **kwargs):
@@ -8,31 +7,8 @@ def main(server=None, **kwargs):
 
 
 def app():
-    # menu = [
-    #     (
-    #         "File",
-    #         [
-    #             ("Open video", "open-video"),
-    #             # "---",
-    #             # ("Exit", "exit"),
-    #         ],
-    #     ),
-    #     (
-    #         "Num frames",
-    #         [
-    #             ("num frames", "frame-num"),
-    #         ],
-    #     ),
-    #     (
-    #         "ith frame",
-    #         [
-    #             ("i-th frame", "ith-num"),
-    #         ],
-    #     ),
-    # ]
-    main(exec_mode="desktop", frameless=False, easy_drag=False)  # , menu=menu)
+    main(frameless=False, easy_drag=False)
 
 
 if __name__ == "__main__":
-    freeze_support()
     main()
