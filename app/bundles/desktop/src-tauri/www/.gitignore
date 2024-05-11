@@ -1,0 +1,9 @@
+# generated content
+__trame_quasar
+__trame_rca/
+__trame_tauri/
+assets
+index.html
+loading
+logo.png
+vue.global.js
