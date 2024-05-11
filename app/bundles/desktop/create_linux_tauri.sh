@@ -10,6 +10,7 @@ python -m PyInstaller \
     --clean --noconfirm \
     --hidden-import numpy \
     --hidden-import pkgutil \
+    --exclude-module tkinter \
     --collect-data trame_quasar \
     --collect-data trame_rca \
     --collect-data trame_client \

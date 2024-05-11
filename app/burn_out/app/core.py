@@ -3,17 +3,17 @@ import asyncio
 import logging
 from io import StringIO
 from pathlib import Path
-from tkinter import filedialog, Tk, TclError
 
 from trame.app import get_server, asynchronous
 from trame.decorators import TrameApp, change, controller, life_cycle
 from trame.ui.quasar import QLayout
-from trame.widgets import quasar, html, client, rca
+from trame.widgets import quasar, html, client, rca, tauri
 
 from .assets import ASSETS, KWIVER_CONFIG
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
 from .utils import VideoAdapter
 from .video_importer import VideoImporter
+from .dialogs import TclTKDialog, TauriDialog
 
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
@@ -49,17 +49,6 @@ logger.setLevel(logging.DEBUG)
 
 VIDEO_ADAPTER_NAME = "active-video"
 
-SUPPORTED_VIDEO_FORMATS = (
-    ("MPEG Video", "*.mpeg"),
-    ("MPG Video", "*.mpg"),
-    ("MP4 Video", "*.mp4"),
-    ("AVI Video", "*.avi"),
-    ("Windows Media Video", "*.wmv"),
-    ("QuickTime Video", "*.mov"),
-    ("MPEG Transport Stream", "*.ts"),
-    ("Image List", "*.txt"),
-)
-
 
 def pick_video_reader_config(path):
     if Path(path).suffix == ".txt":
@@ -73,6 +62,7 @@ class BurnOutApp:
     def __init__(self, server=None):
         self.server = get_server(server, client_type="vue3")
         self.web_only = False
+        self.use_tk = False
         if self.server.hot_reload:
             self.server.controller.on_server_reload.add(self._build_ui)
 
@@ -93,13 +83,11 @@ class BurnOutApp:
         self.video_previous_frame_index = -1
         self.video_importer = VideoImporter()
 
-        # Tk: native file dialog
-        try:
-            self.tk_root = Tk()
-            self.tk_root.withdraw()
-            self.tk_root.wm_attributes("-topmost", 1)
-        except TclError:
-            self.web_only = True
+        self.server.cli.add_argument(
+            "--use-tk",
+            help="Use tcl/tk for file pickers. Usefull if working with the web version",
+            action="store_true",
+        )
 
         self.server.cli.add_argument(
             "--data",
@@ -107,6 +95,11 @@ class BurnOutApp:
             dest="data",
             default=None,
         )
+
+        if self.cli_args.use_tk:
+            self.dialog = TclTKDialog()
+        else:
+            self.dialog = TauriDialog()
 
         # Generate UI
         self._build_ui()
@@ -162,47 +155,18 @@ class BurnOutApp:
     # Desktop app helpers
     # -------------------------------------------------------------------------
 
-    def save_metadata(self):
-        logger.debug("menu:save_metadata")
-        filename = filedialog.asksaveasfilename(
-            filetypes=(
-                ("Comma-Separated Values", "*.csv"),
-                ("JavaScript Object Notation", "*.json"),
-            ),
-            defaultextension=".csv",
-            title="Save Metadata",
-        )
+    def save_metadata(self, filename=None):
         if filename:
             self.video_importer.write(filename, KWIVER_CONFIG["gui_metadata_writer"])
 
-    def save_klv(self):
-        logger.debug("menu:save_klv")
-        filename = filedialog.asksaveasfilename(
-            filetypes=(("JavaScript Object Notation", "*.json"),),
-            defaultextension=".json",
-            title="Save KLV",
-        )
+    def save_klv(self, filename=None):
         if filename:
             self.video_importer.write(filename, KWIVER_CONFIG["gui_klv_writer"])
 
     def open_file(self, file_to_load=None):
-        logger.debug("open file")
         if file_to_load is None:
-            file_to_load = filedialog.askopenfile(
-                title="Select video to load",
-                filetypes=(
-                    (
-                        "All supported Video Files",
-                        " ".join(ext for _, ext in SUPPORTED_VIDEO_FORMATS),
-                    ),
-                    ("All files", "*.*"),
-                    *SUPPORTED_VIDEO_FORMATS,
-                ),
-            )
-            if file_to_load is None:
-                return
-            file_to_load = file_to_load.name
-
+            return
+        logger.debug("open file")
         logger.debug(f" => {file_to_load=}")
         if self.video_source:
             self.video_source.close()
@@ -257,15 +221,29 @@ class BurnOutApp:
     # -------------------------------------------------------------------------
     # Menu handler
     # -------------------------------------------------------------------------
+    async def dialog_open_video(self):
+        file_path = await self.dialog.open_video()
+        self.open_file(file_path)
+
+    async def dialog_save_metadata(self):
+        file_path = await self.dialog.save_metadata()
+        self.save_metadata(file_path)
+
+    async def dialog_save_klv(self):
+        file_path = await self.dialog.save_klv()
+        self.save_klv(file_path)
 
     def on_menu_file_open(self):
-        self.open_file()
+        logger.debug("menu:file_open")
+        asynchronous.create_task(self.dialog_open_video())
 
     def on_menu_file_export_meta(self):
-        self.save_metadata()
+        logger.debug("menu:export_metadata")
+        asynchronous.create_task(self.dialog_save_metadata())
 
     def on_menu_file_export_klv(self):
-        self.save_klv()
+        logger.debug("menu:export_klv")
+        asynchronous.create_task(self.dialog_save_klv())
 
     def on_menu_file_remove_burnin(self):
         logger.debug("on_menu_file_remove_burnin")
@@ -376,6 +354,9 @@ class BurnOutApp:
 
     def _build_ui(self, *args, **kwargs):
         with QLayout(self.server, view="hHh lpR fFf") as layout:
+            with tauri.Dialog() as dialog:
+                self.dialog.open_handler = dialog.open
+                self.dialog.save_handler = dialog.save
             client.Style("html { overflow: hidden; }")
             self.ctrl.toggle_fullscreen = client.JSEval(
                 exec="""
