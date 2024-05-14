@@ -339,9 +339,10 @@ class BurnOutApp:
 
     def _build_ui(self, *args, **kwargs):
         with QLayout(self.server, view="hHh lpR fFf") as layout:
-            with tauri.Dialog() as dialog:
-                self.dialog.open_handler = dialog.open
-                self.dialog.save_handler = dialog.save
+            if not self.cli_args.use_tk:
+                with tauri.Dialog() as dialog:
+                    self.dialog.open_handler = dialog.open
+                    self.dialog.save_handler = dialog.save
             client.Style(
                 """
                 /* remove scrollbars  from main window */

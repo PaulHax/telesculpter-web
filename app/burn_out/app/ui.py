@@ -40,7 +40,7 @@ class VideoControls(html.Div):
                 outlined=True,
                 type="number",
                 dense=True,
-                style="min-width:60px",
+                style="min-width:3.75rem",
             )
             quasar.QSeparator(vertical=True)
             quasar.QBtn(
@@ -61,6 +61,7 @@ class VideoControls(html.Div):
             )
             quasar.QSlider(
                 classes="col",
+                style="min-width:6.25rem",
                 v_model=(play_speed, 60),
                 min=(-20,),
                 max=(60,),
