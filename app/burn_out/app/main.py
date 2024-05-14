@@ -3,7 +3,7 @@ from .core import BurnOutApp
 
 def main(server=None, **kwargs):
     app = BurnOutApp(server)
-    app.server.start(on_message=app.server.controller.on_desktop_msg, **kwargs)
+    app.server.start(**kwargs)
 
 
 def app():

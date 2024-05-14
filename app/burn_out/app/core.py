@@ -61,7 +61,6 @@ def pick_video_reader_config(path):
 class BurnOutApp:
     def __init__(self, server=None):
         self.server = get_server(server, client_type="vue3")
-        self.web_only = False
         self.use_tk = False
         if self.server.hot_reload:
             self.server.controller.on_server_reload.add(self._build_ui)
@@ -190,30 +189,9 @@ class BurnOutApp:
             if video_fps != -1.0:
                 self.video_fps = video_fps
 
-    @controller.set("on_desktop_msg")
-    def desktop_msg(self, msg):
-        logger.debug(f"{msg=}")
-        if msg == "menu:open-video":
-            self.open_file()
-        elif msg == "menu:exit":
-            self.exit()
-        elif msg == "closing":
-            self.video_importer.close()
-        else:
-            logger.debug(f"Desktop msg: {msg}")
-
     def exit(self):
-        if self.ctrl.pywebview_window_call.exists():
-            self.ctrl.pywebview_window_call("destroy")
-        else:
-            asynchronous.create_task(self.server.stop())
+        asynchronous.create_task(self.server.stop())
         self.video_importer.close()
-
-    def maximize(self):
-        if self.ctrl.pywebview_window_call.exists():
-            self.ctrl.pywebview_window_call("toggle_fullscreen")
-        else:
-            self.ctrl.toggle_fullscreen()
 
     def cancel(self):
         self.video_importer.cancel()
@@ -368,30 +346,6 @@ class BurnOutApp:
             """
             ).exec
             with quasar.QHeader():
-                if self.web_only:
-                    with quasar.QBar(classes="pywebview-drag-region"):
-                        # html.Div("File", classes="cursor-pointer")
-                        # html.Div("View", classes="cursor-pointer")
-                        # html.Div("Help", classes="cursor-pointer")
-                        # quasar.QSpace()
-                        html.Img(src=ASSETS.logo, style="height: 20px")
-                        quasar.QSpace()
-                        if self.server.hot_reload:
-                            quasar.QBtn(
-                                dense=True,
-                                flat=True,
-                                icon="published_with_changes",
-                                click=self.ctrl.on_server_reload,
-                            )
-                        quasar.QBtn(
-                            dense=True,
-                            flat=True,
-                            icon="crop_square",
-                            click=self.maximize,
-                        )
-                        quasar.QBtn(
-                            dense=True, flat=True, icon="close", click=self.exit
-                        )
                 with quasar.QBar(
                     classes="bg-blue-grey-2 text-grey-10 q-pa-sm q-pl-md row items-center"
                 ):
