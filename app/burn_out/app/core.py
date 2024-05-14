@@ -342,7 +342,21 @@ class BurnOutApp:
             with tauri.Dialog() as dialog:
                 self.dialog.open_handler = dialog.open
                 self.dialog.save_handler = dialog.save
-            client.Style("html { overflow: hidden; }")
+            client.Style(
+                """
+                /* remove scrollbars  from main window */
+                html { overflow: hidden; }
+
+                /* remove transition delay/effect from video srub transition */ 
+                .no-transition.q-slider--inactive .q-slider__selection {
+                    transition: none !important;
+                  }
+
+                .no-transition.q-slider--inactive .q-slider__thumb--h {
+                    transition: none !important;
+                }
+            """
+            )
             self.ctrl.toggle_fullscreen = client.JSEval(
                 exec="""
                 if (!window.document.fullscreenElement) {

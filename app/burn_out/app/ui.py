@@ -22,7 +22,7 @@ class VideoControls(html.Div):
 
         with self:
             quasar.QSlider(
-                classes="col-8",
+                classes="col-8 no-transition",
                 v_model=(current_frame, 1),
                 min=(1,),
                 max=(n_frames, 1),
