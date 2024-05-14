@@ -284,11 +284,7 @@ class BurnOutApp:
         while self.state.video_playing:
             fps = speed_to_fps(self.state.video_play_speed)
             # self.state.video_play_speed_label = f"{round(fps)} fps" enable once we match the reported fps
-            await asyncio.sleep(
-                # 1 / (self.video_fps * tranform_play_speed(self.state.video_play_speed))
-                1
-                / fps
-            )
+            await asyncio.sleep(1.0 / fps)
             with self.state:
                 if self.state.video_current_frame < self.state.video_n_frames:
                     self.state.video_current_frame += 1
