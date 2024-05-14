@@ -40,6 +40,7 @@ class VideoControls(html.Div):
                 outlined=True,
                 type="number",
                 dense=True,
+                style="min-width:60px",
             )
             quasar.QSeparator(vertical=True)
             quasar.QBtn(
@@ -121,7 +122,6 @@ class FileMenu(html.Div):
                                     clickable=True,
                                     **close_popup,
                                     click=on_menu_file_export_meta,
-                                    disable=True,
                                 ):
                                     quasar.QItemSection(
                                         "Metadata...",
@@ -131,7 +131,6 @@ class FileMenu(html.Div):
                                     clickable=True,
                                     **close_popup,
                                     click=on_menu_file_export_klv,
-                                    disable=True,
                                 ):
                                     quasar.QItemSection(
                                         "KLV Packets...",
@@ -154,7 +153,6 @@ class FileMenu(html.Div):
                         clickable=True,
                         **close_popup,
                         click=on_menu_file_cancel,
-                        disable=True,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
                             quasar.QIcon(name="do_not_disturb_alt", size="xs")
@@ -253,7 +251,6 @@ class ViewMenu(html.Div):
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_view_toggle_log,
-                        disable=True,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):
                             quasar.QIcon(
