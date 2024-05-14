@@ -150,6 +150,16 @@ class BurnOutApp:
             # Force push image
             self.on_video_current_frame(1, True)
 
+    @life_cycle.client_exited
+    def on_client_exited(self, **kwargs):
+        # make sure we terminate the secondary proccess
+        self.video_importer.close()
+
+    @life_cycle.server_exited
+    def on_server_exited(self, **kwargs):
+        # make sure we terminate the secondary proccess
+        self.video_importer.close()
+
     # -------------------------------------------------------------------------
     # Desktop app helpers
     # -------------------------------------------------------------------------
