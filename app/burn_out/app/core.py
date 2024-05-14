@@ -74,6 +74,7 @@ class BurnOutApp:
         self.state.log_stream = ""
         self.iostream = RedirectedStringIO(self.state)
         logging.basicConfig(stream=self.iostream)
+        self.state.show_view_metadata = True
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
@@ -390,7 +391,7 @@ class BurnOutApp:
                     ):
                         with html.Template(raw_attrs=["v-slot:before"]):
                             with quasar.QSplitter(
-                                v_model=("split_meta", 0),
+                                v_model=("split_meta", 20),
                                 style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
                                 limits=([0, 50],),
                                 separator_style="opacity: 0;",
@@ -399,7 +400,7 @@ class BurnOutApp:
                                     with quasar.QCard(
                                         flat=True,
                                         bordered=True,
-                                        v_show=("show_view_metadata", False),
+                                        v_show=("show_view_metadata", True),
                                         classes="absolute column justify-between content-stretch",
                                         style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
                                     ):
