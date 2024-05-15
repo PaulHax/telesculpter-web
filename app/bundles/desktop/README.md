@@ -9,8 +9,19 @@ The files under `src-tauri` were created using as a template [this](https://gith
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -U pip
-pip install  ../
+pip install  ../../
 ```
+on Windows
+```cmd
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+pip install  ..\..\
+#TODO make it part of burnout requirements
+pip install kwiver-2.0.0-cp38-cp38-win_amd64.whl
+```
+
+
 2. Add pyinstaller and additional packages required for bundling.
 ```bash
 pip install -r ./requirements.txt
@@ -21,6 +32,7 @@ pip install -r ./requirements_linux.txt
 ```
 
 3. Since Tauri is written in Rust, let's get setup with its dev environment.
+(This is required only the first time)
 
 ```bash
 # Install rust
@@ -28,12 +40,34 @@ curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
 
 # Enable rust within shell
 . "$HOME/.cargo/env"
+```
+on windows (powershell)
+```powershell
+# Install rust
+curl.exe -o rustup-init.exe https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe 
+.\rustup-init.exe
 
-# Install tauri-cli
+# Enable rust within the shell
+$env:PATH="C:\Users\User\.cargo\bin;$env:PATH"
+```
+On windows you also need to compile the C++ server launcher.
+```cmd
+cd .\src-tauri\sidecar
+.\compile_sidecar.exe
+cd ..\..\
+```
+
+4. Install tauri-cli(required only once)
+```
 cargo install tauri-cli
 ```
 
-4. Run the build script
+5. Run the build script
 ```bash
 ./create_linux_tauri.sh
 ```
+or
+```cmd
+.\create_exe_tauri.bat
+```
+
