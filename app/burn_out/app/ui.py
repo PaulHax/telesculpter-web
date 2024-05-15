@@ -79,6 +79,30 @@ class VideoControls(html.Div):
             # )
 
 
+class AboutDialog(html.Div):
+    def __init__(
+        self,
+        show_about_dialog="show_about_dialog",
+        about_dialog_text="about_dialog_text",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        with self:
+            with quasar.QDialog(
+                v_model=(show_about_dialog, False),
+            ):
+                with quasar.QCard(
+                    flat=True,
+                    bordered=True,
+                    style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                ):
+                    with quasar.QCardSection():
+                        html.Div(
+                            f"{{{{ {about_dialog_text} }}}}",
+                            style="white-space: pre-line;",  # respect new line in input TODO breaks html parsing
+                        )
+
+
 class FileMenu(html.Div):
     def __init__(
         self,
@@ -137,18 +161,18 @@ class FileMenu(html.Div):
                                         "KLV Packets...",
                                         classes="cursor-pointer non-selectable",
                                     )
-                    with quasar.QItem(
-                        clickable=True,
-                        **close_popup,
-                        click=on_menu_file_remove_burnin,
-                        disable=True,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            # quasar.QIcon(name="description", size="xs")
-                            pass
-                        quasar.QItemSection(
-                            "Remove Burn-in...", classes="cursor-pointer non-selectable"
-                        )
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    **close_popup,
+                    #    click=on_menu_file_remove_burnin,
+                    #    disable=True,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        # quasar.QIcon(name="description", size="xs")
+                    #        pass
+                    #    quasar.QItemSection(
+                    #        "Remove Burn-in...", classes="cursor-pointer non-selectable"
+                    #    )
                     quasar.QSeparator()
                     with quasar.QItem(
                         clickable=True,
@@ -210,31 +234,31 @@ class ViewMenu(html.Div):
                             "Loop Slideshow", classes="cursor-pointer non-selectable"
                         )
                     quasar.QSeparator()
-                    with quasar.QItem(
-                        clickable=True,
-                        click=on_menu_view_reset,
-                        disable=True,
-                        **close_popup,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            quasar.QIcon(name="crop_free", size="xs")
-                        quasar.QItemSection(
-                            "Reset View", classes="cursor-pointer non-selectable"
-                        )
-                    quasar.QSeparator()
-                    with quasar.QItem(
-                        clickable=True,
-                        click=on_menu_view_reset,
-                        disable=True,
-                        **close_popup,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            quasar.QIcon(name="palette", size="xs")
-                        quasar.QItemSection(
-                            "Background Color...",
-                            classes="cursor-pointer non-selectable",
-                        )
-                    quasar.QSeparator()
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    click=on_menu_view_reset,
+                    #    disable=True,
+                    #    **close_popup,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        quasar.QIcon(name="crop_free", size="xs")
+                    #    quasar.QItemSection(
+                    #        "Reset View", classes="cursor-pointer non-selectable"
+                    #    )
+                    # quasar.QSeparator()
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    click=on_menu_view_reset,
+                    #    disable=True,
+                    #    **close_popup,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        quasar.QIcon(name="palette", size="xs")
+                    #    quasar.QItemSection(
+                    #        "Background Color...",
+                    #        classes="cursor-pointer non-selectable",
+                    #    )
+                    # quasar.QSeparator()
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_view_toggle_meta,
@@ -277,23 +301,22 @@ class HelpMenu(html.Div):
         with self:
             with quasar.QMenu():
                 with quasar.QList(dense=True, style="min-width: 200px"):
-                    with quasar.QItem(
-                        clickable=True,
-                        click=on_menu_help_manual,
-                        disable=True,
-                        **close_popup,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            quasar.QIcon(name="question_mark", size="xs")
-                        quasar.QItemSection(
-                            "BurnOut User Manual",
-                            classes="cursor-pointer non-selectable",
-                        )
-                    quasar.QSeparator()
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    click=on_menu_help_manual,
+                    #    disable=True,
+                    #    **close_popup,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        quasar.QIcon(name="question_mark", size="xs")
+                    #    quasar.QItemSection(
+                    #        "BurnOut User Manual",
+                    #        classes="cursor-pointer non-selectable",
+                    #    )
+                    # quasar.QSeparator()
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_help_about,
-                        disable=True,
                         **close_popup,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):

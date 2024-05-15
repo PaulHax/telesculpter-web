@@ -10,11 +10,12 @@ from trame.ui.quasar import QLayout
 from trame.widgets import quasar, html, client, rca, tauri
 
 from .assets import ASSETS, KWIVER_CONFIG
-from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
+from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu, AboutDialog
 from .utils import VideoAdapter
 from .video_importer import VideoImporter
 from .dialogs import TclTKDialog, TauriDialog
 
+import kwiver
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
 from kwiver.vital.config import read_config_file
@@ -57,6 +58,25 @@ def pick_video_reader_config(path):
         return KWIVER_CONFIG["gui_image_video_reader"]
 
 
+def generate_about_content():
+    return """BurnOut
+    Version 0.17.0
+    Using KWIVER 2.0.0
+
+    BurnOut:
+      Graphical tool for burned-in metadata detection, extraction, and removal in combination with KLV video metadata viewing and extraction.
+
+    http://www.gitlab.com/kwiver/burnoutweb
+    http://www.kwiver.org/
+
+
+    Copyright © Kitware 2024
+"""
+
+
+# TODO fix in kwiver : {kwiver.__version__}
+
+
 @TrameApp()
 class BurnOutApp:
     def __init__(self, server=None):
@@ -75,6 +95,8 @@ class BurnOutApp:
         self.iostream = RedirectedStringIO(self.state)
         logging.basicConfig(stream=self.iostream)
         self.state.show_view_metadata = True
+        self.state.show_about_dialog = False
+        self.state.about_dialog_text = generate_about_content()
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
@@ -270,7 +292,7 @@ class BurnOutApp:
         logger.debug("on_menu_help_manual")
 
     def on_menu_help_about(self):
-        logger.debug("on_menu_help_about")
+        self.state.show_about_dialog = True
 
     # -------------------------------------------------------------------------
     # Async tasks
@@ -390,7 +412,7 @@ class BurnOutApp:
                         self.on_menu_help_manual,
                         self.on_menu_help_about,
                     )
-
+            AboutDialog()
             with quasar.QPageContainer():
                 with quasar.QPage():
                     with quasar.QSplitter(
