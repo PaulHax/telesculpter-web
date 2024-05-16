@@ -26,10 +26,6 @@ pip install kwiver-2.0.0-cp38-cp38-win_amd64.whl
 ```bash
 pip install -r ./requirements.txt
 ```
-or
-```bash
-pip install -r ./requirements_linux.txt
-```
 
 3. Since Tauri is written in Rust, let's get setup with its dev environment.
 (This is required only the first time)
