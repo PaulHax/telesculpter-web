@@ -35,6 +35,7 @@ fn main() {
               task::sleep(Duration::from_secs(2)).await;
               splashscreen_window.close().unwrap();
               main_window.show().unwrap();
+              main_window.set_focus().unwrap();
             }
           }
         }
