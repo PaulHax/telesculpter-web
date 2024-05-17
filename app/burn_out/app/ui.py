@@ -78,12 +78,30 @@ class VideoControls(html.Div):
             #    style="width: 50px;",
             # )
 
+# TODO fix in kwiver : get version from {kwiver.__version__}
+# TODO see about dialog in QT application what else should we bring ?
+#  - versions of fletch dependencies/
+# - version of python packages (pip list)
+# - license ?
+def generate_about_content():
+    return f"""
+    <h3> BurnOut </h3> <br>
+    Version 0.17.0 <br>
+    Using KWIVER 2.0.0 <br>
+    <br>
+    BurnOut: <br>
+      Graphical tool for burned-in metadata detection, extraction, and removal in combination with KLV video metadata viewing and extraction.
+
+    <a href="http://www.gitlab.com/kwiver/burnoutweb"> http://www.gitlab.com/kwiver/burnoutweb </a> <br>
+    <a href="http://www.kwiver.org"> http://www.kwiver.org </a>  <br>
+    <br>
+    Copyright © Kitware 2024
+"""
 
 class AboutDialog(html.Div):
     def __init__(
         self,
         show_about_dialog="show_about_dialog",
-        about_dialog_text="about_dialog_text",
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -96,11 +114,8 @@ class AboutDialog(html.Div):
                     bordered=True,
                     style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
                 ):
-                    with quasar.QCardSection():
-                        html.Div(
-                            f"{{{{ {about_dialog_text} }}}}",
-                            style="white-space: pre-line;",  # respect new line in input TODO breaks html parsing
-                        )
+                    with quasar.QCardSection() as qs:
+                        qs.add_child(generate_about_content())
 
 
 class FileMenu(html.Div):

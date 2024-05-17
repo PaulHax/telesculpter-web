@@ -58,23 +58,8 @@ def pick_video_reader_config(path):
         return KWIVER_CONFIG["gui_image_video_reader"]
 
 
-def generate_about_content():
-    return """BurnOut
-    Version 0.17.0
-    Using KWIVER 2.0.0
-
-    BurnOut:
-      Graphical tool for burned-in metadata detection, extraction, and removal in combination with KLV video metadata viewing and extraction.
-
-    http://www.gitlab.com/kwiver/burnoutweb
-    http://www.kwiver.org/
 
 
-    Copyright © Kitware 2024
-"""
-
-
-# TODO fix in kwiver : {kwiver.__version__}
 
 
 @TrameApp()
@@ -94,9 +79,6 @@ class BurnOutApp:
         self.state.log_stream = ""
         self.iostream = RedirectedStringIO(self.state)
         logging.basicConfig(stream=self.iostream)
-        self.state.show_view_metadata = True
-        self.state.show_about_dialog = False
-        self.state.about_dialog_text = generate_about_content()
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
