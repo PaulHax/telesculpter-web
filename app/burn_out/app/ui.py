@@ -22,7 +22,7 @@ class VideoControls(html.Div):
 
         with self:
             quasar.QSlider(
-                classes="col-8",
+                classes="col-8 no-transition",
                 v_model=(current_frame, 1),
                 min=(1,),
                 max=(n_frames, 1),
@@ -40,7 +40,7 @@ class VideoControls(html.Div):
                 outlined=True,
                 type="number",
                 dense=True,
-                style="min-width:60px",
+                style="min-width:3.75rem",
             )
             quasar.QSeparator(vertical=True)
             quasar.QBtn(
@@ -61,6 +61,7 @@ class VideoControls(html.Div):
             )
             quasar.QSlider(
                 classes="col",
+                style="min-width:6.25rem",
                 v_model=(play_speed, 60),
                 min=(-20,),
                 max=(60,),
@@ -76,6 +77,45 @@ class VideoControls(html.Div):
             #    classes="text-right",
             #    style="width: 50px;",
             # )
+
+# TODO fix in kwiver : get version from {kwiver.__version__}
+# TODO see about dialog in QT application what else should we bring ?
+#  - versions of fletch dependencies/
+# - version of python packages (pip list)
+# - license ?
+def generate_about_content():
+    return f"""
+    <h3> BurnOut </h3> <br>
+    Version 0.17.0 <br>
+    Using KWIVER 2.0.0 <br>
+    <br>
+    BurnOut: <br>
+      Graphical tool for burned-in metadata detection, extraction, and removal in combination with KLV video metadata viewing and extraction.
+
+    <a href="http://www.gitlab.com/kwiver/burnoutweb"> http://www.gitlab.com/kwiver/burnoutweb </a> <br>
+    <a href="http://www.kwiver.org"> http://www.kwiver.org </a>  <br>
+    <br>
+    Copyright © Kitware 2024
+"""
+
+class AboutDialog(html.Div):
+    def __init__(
+        self,
+        show_about_dialog="show_about_dialog",
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        with self:
+            with quasar.QDialog(
+                v_model=(show_about_dialog, False),
+            ):
+                with quasar.QCard(
+                    flat=True,
+                    bordered=True,
+                    style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                ):
+                    with quasar.QCardSection() as qs:
+                        qs.add_child(generate_about_content())
 
 
 class FileMenu(html.Div):
@@ -136,18 +176,18 @@ class FileMenu(html.Div):
                                         "KLV Packets...",
                                         classes="cursor-pointer non-selectable",
                                     )
-                    with quasar.QItem(
-                        clickable=True,
-                        **close_popup,
-                        click=on_menu_file_remove_burnin,
-                        disable=True,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            # quasar.QIcon(name="description", size="xs")
-                            pass
-                        quasar.QItemSection(
-                            "Remove Burn-in...", classes="cursor-pointer non-selectable"
-                        )
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    **close_popup,
+                    #    click=on_menu_file_remove_burnin,
+                    #    disable=True,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        # quasar.QIcon(name="description", size="xs")
+                    #        pass
+                    #    quasar.QItemSection(
+                    #        "Remove Burn-in...", classes="cursor-pointer non-selectable"
+                    #    )
                     quasar.QSeparator()
                     with quasar.QItem(
                         clickable=True,
@@ -209,31 +249,31 @@ class ViewMenu(html.Div):
                             "Loop Slideshow", classes="cursor-pointer non-selectable"
                         )
                     quasar.QSeparator()
-                    with quasar.QItem(
-                        clickable=True,
-                        click=on_menu_view_reset,
-                        disable=True,
-                        **close_popup,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            quasar.QIcon(name="crop_free", size="xs")
-                        quasar.QItemSection(
-                            "Reset View", classes="cursor-pointer non-selectable"
-                        )
-                    quasar.QSeparator()
-                    with quasar.QItem(
-                        clickable=True,
-                        click=on_menu_view_reset,
-                        disable=True,
-                        **close_popup,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            quasar.QIcon(name="palette", size="xs")
-                        quasar.QItemSection(
-                            "Background Color...",
-                            classes="cursor-pointer non-selectable",
-                        )
-                    quasar.QSeparator()
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    click=on_menu_view_reset,
+                    #    disable=True,
+                    #    **close_popup,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        quasar.QIcon(name="crop_free", size="xs")
+                    #    quasar.QItemSection(
+                    #        "Reset View", classes="cursor-pointer non-selectable"
+                    #    )
+                    # quasar.QSeparator()
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    click=on_menu_view_reset,
+                    #    disable=True,
+                    #    **close_popup,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        quasar.QIcon(name="palette", size="xs")
+                    #    quasar.QItemSection(
+                    #        "Background Color...",
+                    #        classes="cursor-pointer non-selectable",
+                    #    )
+                    # quasar.QSeparator()
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_view_toggle_meta,
@@ -276,23 +316,22 @@ class HelpMenu(html.Div):
         with self:
             with quasar.QMenu():
                 with quasar.QList(dense=True, style="min-width: 200px"):
-                    with quasar.QItem(
-                        clickable=True,
-                        click=on_menu_help_manual,
-                        disable=True,
-                        **close_popup,
-                    ):
-                        with quasar.QItemSection(style="max-width: 20px;"):
-                            quasar.QIcon(name="question_mark", size="xs")
-                        quasar.QItemSection(
-                            "BurnOut User Manual",
-                            classes="cursor-pointer non-selectable",
-                        )
-                    quasar.QSeparator()
+                    # with quasar.QItem(
+                    #    clickable=True,
+                    #    click=on_menu_help_manual,
+                    #    disable=True,
+                    #    **close_popup,
+                    # ):
+                    #    with quasar.QItemSection(style="max-width: 20px;"):
+                    #        quasar.QIcon(name="question_mark", size="xs")
+                    #    quasar.QItemSection(
+                    #        "BurnOut User Manual",
+                    #        classes="cursor-pointer non-selectable",
+                    #    )
+                    # quasar.QSeparator()
                     with quasar.QItem(
                         clickable=True,
                         click=on_menu_help_about,
-                        disable=True,
                         **close_popup,
                     ):
                         with quasar.QItemSection(style="max-width: 20px;"):

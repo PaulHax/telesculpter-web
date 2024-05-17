@@ -3,18 +3,19 @@ import asyncio
 import logging
 from io import StringIO
 from pathlib import Path
-from tkinter import filedialog, Tk, TclError
 
 from trame.app import get_server, asynchronous
 from trame.decorators import TrameApp, change, controller, life_cycle
 from trame.ui.quasar import QLayout
-from trame.widgets import quasar, html, client, rca
+from trame.widgets import quasar, html, client, rca, tauri
 
 from .assets import ASSETS, KWIVER_CONFIG
-from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu
+from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu, AboutDialog
 from .utils import VideoAdapter
 from .video_importer import VideoImporter
+from .dialogs import TclTKDialog, TauriDialog
 
+import kwiver
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
 from kwiver.vital.config import read_config_file
@@ -49,17 +50,6 @@ logger.setLevel(logging.DEBUG)
 
 VIDEO_ADAPTER_NAME = "active-video"
 
-SUPPORTED_VIDEO_FORMATS = (
-    ("MPEG Video", "*.mpeg"),
-    ("MPG Video", "*.mpg"),
-    ("MP4 Video", "*.mp4"),
-    ("AVI Video", "*.avi"),
-    ("Windows Media Video", "*.wmv"),
-    ("QuickTime Video", "*.mov"),
-    ("MPEG Transport Stream", "*.ts"),
-    ("Image List", "*.txt"),
-)
-
 
 def pick_video_reader_config(path):
     if Path(path).suffix == ".txt":
@@ -68,11 +58,15 @@ def pick_video_reader_config(path):
         return KWIVER_CONFIG["gui_image_video_reader"]
 
 
+
+
+
+
 @TrameApp()
 class BurnOutApp:
     def __init__(self, server=None):
         self.server = get_server(server, client_type="vue3")
-        self.web_only = False
+        self.use_tk = False
         if self.server.hot_reload:
             self.server.controller.on_server_reload.add(self._build_ui)
 
@@ -93,13 +87,11 @@ class BurnOutApp:
         self.video_previous_frame_index = -1
         self.video_importer = VideoImporter()
 
-        # Tk: native file dialog
-        try:
-            self.tk_root = Tk()
-            self.tk_root.withdraw()
-            self.tk_root.wm_attributes("-topmost", 1)
-        except TclError:
-            self.web_only = True
+        self.server.cli.add_argument(
+            "--use-tk",
+            help="Use tcl/tk for file pickers. Usefull if working with the web version",
+            action="store_true",
+        )
 
         self.server.cli.add_argument(
             "--data",
@@ -108,8 +100,26 @@ class BurnOutApp:
             default=None,
         )
 
+        if self.cli_args.use_tk:
+            self.dialog = TclTKDialog()
+        else:
+            self.dialog = TauriDialog()
+
         # Generate UI
         self._build_ui()
+
+    # -------------------------------------------------------------------------
+    # tauri helpers
+    # -------------------------------------------------------------------------
+
+    @life_cycle.server_ready
+    def _tauri_ready(self, **_):
+        logger.debug("_ready")
+        print(f"tauri-server-port={self.server.port}", flush=True)
+
+    @life_cycle.client_connected
+    def _tauri_show(self, **_):
+        print("tauri-client-ready", flush=True)
 
     # -------------------------------------------------------------------------
     # trame helpers
@@ -145,51 +155,32 @@ class BurnOutApp:
             # Force push image
             self.on_video_current_frame(1, True)
 
+    @life_cycle.client_exited
+    def on_client_exited(self, **kwargs):
+        # make sure we terminate the secondary proccess
+        self.video_importer.close()
+
+    @life_cycle.server_exited
+    def on_server_exited(self, **kwargs):
+        # make sure we terminate the secondary proccess
+        self.video_importer.close()
+
     # -------------------------------------------------------------------------
     # Desktop app helpers
     # -------------------------------------------------------------------------
 
-    def save_metadata(self):
-        logger.debug("menu:save_metadata")
-        filename = filedialog.asksaveasfilename(
-            filetypes=(
-                ("Comma-Separated Values", "*.csv"),
-                ("JavaScript Object Notation", "*.json"),
-            ),
-            defaultextension=".csv",
-            title="Save Metadata",
-        )
+    def save_metadata(self, filename=None):
         if filename:
             self.video_importer.write(filename, KWIVER_CONFIG["gui_metadata_writer"])
 
-    def save_klv(self):
-        logger.debug("menu:save_klv")
-        filename = filedialog.asksaveasfilename(
-            filetypes=(("JavaScript Object Notation", "*.json"),),
-            defaultextension=".json",
-            title="Save KLV",
-        )
+    def save_klv(self, filename=None):
         if filename:
             self.video_importer.write(filename, KWIVER_CONFIG["gui_klv_writer"])
 
     def open_file(self, file_to_load=None):
-        logger.debug("open file")
         if file_to_load is None:
-            file_to_load = filedialog.askopenfile(
-                title="Select video to load",
-                filetypes=(
-                    (
-                        "All supported Video Files",
-                        " ".join(ext for _, ext in SUPPORTED_VIDEO_FORMATS),
-                    ),
-                    ("All files", "*.*"),
-                    *SUPPORTED_VIDEO_FORMATS,
-                ),
-            )
-            if file_to_load is None:
-                return
-            file_to_load = file_to_load.name
-
+            return
+        logger.debug("open file")
         logger.debug(f" => {file_to_load=}")
         if self.video_source:
             self.video_source.close()
@@ -213,30 +204,9 @@ class BurnOutApp:
             if video_fps != -1.0:
                 self.video_fps = video_fps
 
-    @controller.set("on_desktop_msg")
-    def desktop_msg(self, msg):
-        logger.debug(f"{msg=}")
-        if msg == "menu:open-video":
-            self.open_file()
-        elif msg == "menu:exit":
-            self.exit()
-        elif msg == "closing":
-            self.video_importer.close()
-        else:
-            logger.debug(f"Desktop msg: {msg}")
-
     def exit(self):
-        if self.ctrl.pywebview_window_call.exists():
-            self.ctrl.pywebview_window_call("destroy")
-        else:
-            asynchronous.create_task(self.server.stop())
+        asynchronous.create_task(self.server.stop())
         self.video_importer.close()
-
-    def maximize(self):
-        if self.ctrl.pywebview_window_call.exists():
-            self.ctrl.pywebview_window_call("toggle_fullscreen")
-        else:
-            self.ctrl.toggle_fullscreen()
 
     def cancel(self):
         self.video_importer.cancel()
@@ -244,15 +214,29 @@ class BurnOutApp:
     # -------------------------------------------------------------------------
     # Menu handler
     # -------------------------------------------------------------------------
+    async def dialog_open_video(self):
+        file_path = await self.dialog.open_video()
+        self.open_file(file_path)
+
+    async def dialog_save_metadata(self):
+        file_path = await self.dialog.save_metadata()
+        self.save_metadata(file_path)
+
+    async def dialog_save_klv(self):
+        file_path = await self.dialog.save_klv()
+        self.save_klv(file_path)
 
     def on_menu_file_open(self):
-        self.open_file()
+        logger.debug("menu:file_open")
+        asynchronous.create_task(self.dialog_open_video())
 
     def on_menu_file_export_meta(self):
-        self.save_metadata()
+        logger.debug("menu:export_metadata")
+        asynchronous.create_task(self.dialog_save_metadata())
 
     def on_menu_file_export_klv(self):
-        self.save_klv()
+        logger.debug("menu:export_klv")
+        asynchronous.create_task(self.dialog_save_klv())
 
     def on_menu_file_remove_burnin(self):
         logger.debug("on_menu_file_remove_burnin")
@@ -290,7 +274,7 @@ class BurnOutApp:
         logger.debug("on_menu_help_manual")
 
     def on_menu_help_about(self):
-        logger.debug("on_menu_help_about")
+        self.state.show_about_dialog = True
 
     # -------------------------------------------------------------------------
     # Async tasks
@@ -304,11 +288,7 @@ class BurnOutApp:
         while self.state.video_playing:
             fps = speed_to_fps(self.state.video_play_speed)
             # self.state.video_play_speed_label = f"{round(fps)} fps" enable once we match the reported fps
-            await asyncio.sleep(
-                # 1 / (self.video_fps * tranform_play_speed(self.state.video_play_speed))
-                1
-                / fps
-            )
+            await asyncio.sleep(1.0 / fps)
             with self.state:
                 if self.state.video_current_frame < self.state.video_n_frames:
                     self.state.video_current_frame += 1
@@ -363,7 +343,25 @@ class BurnOutApp:
 
     def _build_ui(self, *args, **kwargs):
         with QLayout(self.server, view="hHh lpR fFf") as layout:
-            client.Style("html { overflow: hidden; }")
+            if not self.cli_args.use_tk:
+                with tauri.Dialog() as dialog:
+                    self.dialog.open_handler = dialog.open
+                    self.dialog.save_handler = dialog.save
+            client.Style(
+                """
+                /* remove scrollbars  from main window */
+                html { overflow: hidden; }
+
+                /* remove transition delay/effect from video srub transition */ 
+                .no-transition.q-slider--inactive .q-slider__selection {
+                    transition: none !important;
+                  }
+
+                .no-transition.q-slider--inactive .q-slider__thumb--h {
+                    transition: none !important;
+                }
+            """
+            )
             self.ctrl.toggle_fullscreen = client.JSEval(
                 exec="""
                 if (!window.document.fullscreenElement) {
@@ -374,30 +372,6 @@ class BurnOutApp:
             """
             ).exec
             with quasar.QHeader():
-                if self.web_only:
-                    with quasar.QBar(classes="pywebview-drag-region"):
-                        # html.Div("File", classes="cursor-pointer")
-                        # html.Div("View", classes="cursor-pointer")
-                        # html.Div("Help", classes="cursor-pointer")
-                        # quasar.QSpace()
-                        html.Img(src=ASSETS.logo, style="height: 20px")
-                        quasar.QSpace()
-                        if self.server.hot_reload:
-                            quasar.QBtn(
-                                dense=True,
-                                flat=True,
-                                icon="published_with_changes",
-                                click=self.ctrl.on_server_reload,
-                            )
-                        quasar.QBtn(
-                            dense=True,
-                            flat=True,
-                            icon="crop_square",
-                            click=self.maximize,
-                        )
-                        quasar.QBtn(
-                            dense=True, flat=True, icon="close", click=self.exit
-                        )
                 with quasar.QBar(
                     classes="bg-blue-grey-2 text-grey-10 q-pa-sm q-pl-md row items-center"
                 ):
@@ -420,7 +394,7 @@ class BurnOutApp:
                         self.on_menu_help_manual,
                         self.on_menu_help_about,
                     )
-
+            AboutDialog()
             with quasar.QPageContainer():
                 with quasar.QPage():
                     with quasar.QSplitter(
@@ -432,7 +406,7 @@ class BurnOutApp:
                     ):
                         with html.Template(raw_attrs=["v-slot:before"]):
                             with quasar.QSplitter(
-                                v_model=("split_meta", 0),
+                                v_model=("split_meta", 20),
                                 style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
                                 limits=([0, 50],),
                                 separator_style="opacity: 0;",
@@ -441,7 +415,7 @@ class BurnOutApp:
                                     with quasar.QCard(
                                         flat=True,
                                         bordered=True,
-                                        v_show=("show_view_metadata", False),
+                                        v_show=("show_view_metadata", True),
                                         classes="absolute column justify-between content-stretch",
                                         style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
                                     ):

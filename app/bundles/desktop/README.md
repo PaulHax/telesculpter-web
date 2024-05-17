@@ -1,53 +1,69 @@
 # Desktop
 
-This relies on [pyinstaller](https://pyinstaller.org/en/stable/) to bundle your trame application into a standalone desktop application.
-
-In our current setup, we'll rely on the current virtual environment to provide the code content.
+This relies on [pyinstaller](https://pyinstaller.org/en/stable/) and tauri (https://tauri.app/) to bundle your trame application into a standalone desktop application.
+The files under `src-tauri` were created using as a template [this](https://github.com/Kitware/trame-tauri/tree/c27d437d4d1f1840ecf4373ce5fe726f1e7dd707/examples/01_tauri_ws/src-tauri) example.
 
 ## Building the bundle
+1. Create a new virtual environment and install  the burnout application
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -U pip
+pip install  ../../
+```
+on Windows
+```cmd
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install -U pip
+pip install  ..\..\
+#TODO make it part of burnout requirements
+pip install kwiver-2.0.0-cp38-cp38-win_amd64.whl
+```
 
-First, run `pip install -r requirements.txt`. This includes `pyinstaller` and `pywebview`, which is required for trame desktop applications.
 
-Next, take a look at the `run.py` file. This should be just a regular python script that starts your trame desktop application. It can be tested via `python run.py`. Due to multiprocessing in some applications, `multiprocessing.freeze_support()` may be required to avoid an infinite recursion of running the script.
-
-Once `python run.py` seems to be working properly, take a look at `create_exe.bat`. This is the pyinstaller command that we will use. Explanations for each option are provided:
-
-1. `--hidden-import vtkmodules.all`: pyinstaller tries to find every dependency, but sometimes it is not able to. You can add additional python dependencies via the `--hidden-import` option, which may be specified multiple times.
-
-For VTK applications, we can include all VTK modules, or to reduce the final binary size, only include the VTK modules that are actually used. The VTK hooks in pyinstaller should be updated in the future so that this is not necessary; see [pyinstaller/pyinstaller-hooks-contrib#327](https://github.com/pyinstaller/pyinstaller-hooks-contrib/issues/327) for details.
-
-2. `--collect-data pywebvue`: normally, pyinstaller will only install python dependencies. For trame, however, we need some javascript files too. Adding this command will get pyinstaller to install the `pywebvue` javascript files as well.
-
-3. `--onefile`: create a single executable for the output. `pyinstaller` by default creates a folder that contains the executable. The single executable is stand-alone and easy to move between computers. The only downside is that it takes a little longer to start and stop compared to the folder executable, because it must unpack itself before starting.
-
-Note: if you are debugging your `pyinstaller` application, consider removing this option. It is much easier to see whether files/folders ended up in the right place in the folder executable mode.
-
-4. `--windowed`: on Mac and Windows, this prevents the terminal/command prompt from being opened when the application is started.
-
-5. `--icon burn-out.ico`: the icon file to use for the application.
-
-After running `pyinstaller`, the standalone application may be found inside the `dist` directory that is created.
-
-## MacOS
-
+2. Add pyinstaller and additional packages required for bundling.
 ```bash
 pip install -r ./requirements.txt
-./create_mac.sh
-open ./dist/run.app
 ```
 
-## Linux
+3. Since Tauri is written in Rust, let's get setup with its dev environment.
+(This is required only the first time)
 
 ```bash
-pip install -r ./requirements.txt
-./create_linux.sh
-./dist/run
+# Install rust
+curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
+
+# Enable rust within shell
+. "$HOME/.cargo/env"
+```
+on windows (powershell)
+```powershell
+# Install rust
+curl.exe -o rustup-init.exe https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe 
+.\rustup-init.exe
+
+# Enable rust within the shell
+$env:PATH="C:\Users\User\.cargo\bin;$env:PATH"
+```
+On windows you also need to compile the C++ server launcher.
+```cmd
+cd .\src-tauri\sidecar
+.\compile_sidecar.exe
+cd ..\..\
 ```
 
-## Windows
+4. Install tauri-cli(required only once)
+```
+cargo install tauri-cli
+```
 
+5. Run the build script
 ```bash
-pip install -r requirements.txt
-./create_exe.bat
-./dist/run/run.exe
+./create_linux_tauri.sh
 ```
+or
+```cmd
+.\create_exe_tauri.bat
+```
+
