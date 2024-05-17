@@ -2,7 +2,7 @@ import multiprocessing
 import os
 import sys
 
-from burn_out.app.main import app
+from burn_out.app.main import main
 
 # redirect stdout/stderr to avoid issues when running on windows without a console
 # see https://pyinstaller.org/en/latest/common-issues-and-pitfalls.html#sys-stdin-sys-stdout-and-sys-stderr-in-noconsole-windowed-applications-windows-only
@@ -13,4 +13,4 @@ if sys.stderr is None:
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
-    app()
+    main()
