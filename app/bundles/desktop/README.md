@@ -31,20 +31,23 @@ pip install -r ./requirements.txt
 (This is required only the first time)
 
 ```bash
-# Install rust
+# Install rust.
+# Also works in git bash on windows, but add ~/.cargo/bin to the path manually.
 curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf | sh
 
 # Enable rust within shell
 . "$HOME/.cargo/env"
+# or for git bash on windows
+export PATH=$PATH:"/c/Users/$USERNAME/.cargo/bin"
 ```
 on windows (powershell)
 ```powershell
 # Install rust
-curl.exe -o rustup-init.exe https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe 
+curl.exe -o rustup-init.exe https://static.rust-lang.org/rustup/dist/i686-pc-windows-gnu/rustup-init.exe
 .\rustup-init.exe
 
 # Enable rust within the shell
-$env:PATH="C:\Users\User\.cargo\bin;$env:PATH"
+$env:PATH="C:\Users\$env:USERNAME\.cargo\bin;$env:PATH"
 ```
 On windows you also need to compile the C++ server launcher.
 ```cmd
@@ -61,8 +64,10 @@ cargo install tauri-cli
 5. Run the build script
 ```bash
 ./create_linux_tauri.sh
+# or for git bash on windows
+./create_exe_tauri_bash.sh
 ```
-or
+on windows
 ```cmd
 .\create_exe_tauri.bat
 ```
