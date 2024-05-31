@@ -15,16 +15,16 @@ Installing
 Install the application
 
 .. code-block:: console
-
+    # optional, activate a venv
+    python3.8 -m venv .venv && source .venv/bin/activate
     pip install -e .
 
+Temporary: install the kwiver wheel from ci artifacts of https://gitlab.kitware.com/kwiver/kwiver
 
 Run the application
 
 .. code-block:: console
 
     burn-out
-    burn-out-web
 
     burn-out --hot-reload
-    burn-out-web --hot-reload

@@ -2,7 +2,7 @@
 from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.utils.hooks import collect_dynamic_libs
 
-# the default value for linux is  "lib*.so" however wkiver plugins are of the form "kwiver*.so"
+# the default value for linux is  "lib*.so" however kwiver plugins are of the form "kwiver*.so"
 binaries = collect_dynamic_libs(
     "kwiver", search_patterns=["*.dll", "*.dylib", "*.so", "*.pyd"]
 )
