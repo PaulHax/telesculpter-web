@@ -22,61 +22,68 @@ class VideoControls(html.Div):
 
         with self:
             quasar.QSlider(
-                classes="col-8 no-transition",
+                classes="col no-transition",
+                style="min-width:12rem",
                 v_model=(current_frame, 1),
                 min=(1,),
                 max=(n_frames, 1),
                 step=(1,),
             )
-            quasar.QToggle(
-                v_model=(play_loop, True),
-                checked_icon="repeat",
-                unchecked_icon="skip_next",
-                size="xl",
-            )
-            quasar.QInput(
-                classes="col",
-                v_model_number=(current_frame, 1),
-                outlined=True,
-                type="number",
-                dense=True,
-                style="min-width:3.75rem",
-            )
-            quasar.QSeparator(vertical=True)
-            quasar.QBtn(
-                size="sm",
-                v_show=f"!{play_status}",
-                round=True,
-                icon="play_arrow",
-                color="green",
-                click=f"{play_status} = true",
-            )
-            quasar.QBtn(
-                size="sm",
-                v_show=f"{play_status}",
-                round=True,
-                icon="stop",
-                color="red",
-                click=f"{play_status} = false",
-            )
-            quasar.QSlider(
-                classes="col",
-                style="min-width:6.25rem",
-                v_model=(play_speed, 60),
-                min=(-20,),
-                max=(60,),
-                step=(1,),
-                markers=True,
-                snap=True,
-                track_size="25px",
-                thumb_size="5px",
-            )
-            # enable once the reported fps matches the actual performance
-            # html.Div(
-            #    f"{{{{ {play_speed_label} }}}}",
-            #    classes="text-right",
-            #    style="width: 50px;",
-            # )
+            # group so they wrap to the next line together.
+            with html.Div(
+                classes="col-auto row items-center content-center q-gutter-sm"
+            ):
+                quasar.QToggle(
+                    classes="col-auto q-m-none",
+                    v_model=(play_loop, True),
+                    checked_icon="repeat",
+                    unchecked_icon="skip_next",
+                    dense=True,
+                    size="xl",
+                )
+                quasar.QInput(
+                    classes="col-auto",
+                    v_model_number=(current_frame, 1),
+                    outlined=True,
+                    type="number",
+                    dense=True,
+                    style="width:5.0rem",
+                )
+                # avoid class=col so button isn't squashed.
+                quasar.QBtn(
+                    size="sm",
+                    v_show=f"!{play_status}",
+                    round=True,
+                    icon="play_arrow",
+                    color="green",
+                    click=f"{play_status} = true",
+                )
+                quasar.QBtn(
+                    size="sm",
+                    v_show=f"{play_status}",
+                    round=True,
+                    icon="stop",
+                    color="red",
+                    click=f"{play_status} = false",
+                )
+                quasar.QSlider(
+                    classes="col-grow",
+                    style="width:7.25rem",
+                    v_model=(play_speed, 60),
+                    min=(-20,),
+                    max=(60,),
+                    step=(1,),
+                    markers=True,
+                    snap=True,
+                    track_size="25px",
+                    thumb_size="5px",
+                )
+                # enable once the reported fps matches the actual performance
+                # html.Div(
+                #    f"{{{{ {play_speed_label} }}}}",
+                #    classes="text-right",
+                #    style="width: 50px;",
+                # )
 
 # TODO fix in kwiver : get version from {kwiver.__version__}
 # TODO see about dialog in QT application what else should we bring ?
