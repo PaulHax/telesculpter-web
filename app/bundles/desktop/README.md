@@ -8,6 +8,9 @@ The files under `src-tauri` were created using as a template [this](https://gith
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
+# or for git bash on windows
+source .venv/Scripts/activate
+
 pip install -U pip
 pip install  ../../
 ```
@@ -18,6 +21,7 @@ python -m venv .venv
 python -m pip install -U pip
 pip install  ..\..\
 #TODO make it part of burnout requirements
+# retrieve from https://gitlab.kitware.com/kwiver/kwiver/-/packages/442 or the latest package available.
 pip install kwiver-2.0.0-cp38-cp38-win_amd64.whl
 ```
 
@@ -72,3 +76,4 @@ on windows
 .\create_exe_tauri.bat
 ```
 
+This creates installers that can be uploaded to a gitlab release. On windows, both .exe and .msi installers are created.
