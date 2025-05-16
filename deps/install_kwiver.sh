@@ -2,7 +2,7 @@
 
 set -e
 
-readonly kwiver_repo="git@gitlab.kitware.com:kwiver/kwiver.git"
+readonly kwiver_repo="https://gitlab.kitware.com/kwiver/kwiver.git"
 readonly kwiver_commit="89715ee4def77d3b2df97e6fc0a6f21473bc5dd8"
 
 readonly work_dir="$PWD"
