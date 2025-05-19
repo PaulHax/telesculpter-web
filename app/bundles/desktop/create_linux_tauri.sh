@@ -17,8 +17,8 @@ python -m PyInstaller \
     --additional-hooks-dir="$CURRENT_DIR" \
     "$CURRENT_DIR/burn-out.py"
 # fix rpath in a couple of libraries before bundling. These were found by looking into the errors of cargo tauri build --verbose
-patchelf --set-rpath  '$ORIGIN' ./src-tauri/server/_internal/libopenblas64*
-patchelf --set-rpath  '$ORIGIN' ./src-tauri/server/_internal/libgfortran*
+patchelf --set-rpath  '$ORIGIN' ./src-tauri/server/_internal/numpy.libs/libopenblasp*
+patchelf --set-rpath  '$ORIGIN' ./src-tauri/server/_internal/numpy.libs/libgfortran*
 
 # Generate webcontent for tauri to bundle
 python -m trame.tools.www --output ./src-tauri/www
