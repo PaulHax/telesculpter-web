@@ -1,11 +1,10 @@
-import os
 import asyncio
 import logging
 from io import StringIO
 from pathlib import Path
 
 from trame.app import get_server, asynchronous
-from trame.decorators import TrameApp, change, controller, life_cycle
+from trame.decorators import TrameApp, change, life_cycle
 from trame.ui.quasar import QLayout
 from trame.widgets import quasar, html, client, rca, tauri
 
@@ -56,10 +55,6 @@ def pick_video_reader_config(path):
         return KWIVER_CONFIG["gui_image_list_reader"]
     else:
         return KWIVER_CONFIG["gui_image_video_reader"]
-
-
-
-
 
 
 @TrameApp()
@@ -192,7 +187,9 @@ class BurnOutApp:
 
         with self.state as state:
             self.video_source = VideoInput.set_nested_algo_configuration(
-                "video_reader", read_config_file(pick_video_reader_config(file_to_load))
+                "video_reader",
+                read_config_file(pick_video_reader_config(file_to_load)),
+                None,
             )
             self.video_source.open(file_to_load)
             state.video_loaded = True
