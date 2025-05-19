@@ -5,10 +5,17 @@ from pathlib import Path
 from kwiver.vital import plugin_management
 from kwiver.vital import vital_logging
 import logging
+import sys
 from multiprocessing import Process, Queue
 
 logger = vital_logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
+
+# Configure a StreamHandler to output to stdout
+stream_handler = logging.StreamHandler(sys.stdout)
+formatter = logging.Formatter("%(name)s - %(message)s")
+stream_handler.setFormatter(formatter)
+logger.addHandler(stream_handler)
 
 
 class VideoImporter:
@@ -69,7 +76,9 @@ def _extract_metadata(video_path, config_path):
         logger.warn("An error was found in the video source algorithm configuration.")
         return
 
-    video_reader = VideoInput.set_nested_algo_configuration("video_reader", config)
+    video_reader = VideoInput.set_nested_algo_configuration(
+        "video_reader", config, None
+    )
     video_reader.open(video_path)
 
     frame_metadata = dict()
@@ -110,7 +119,7 @@ def _write(data, metadata_path, config_path):
     #
     try:
         metadata_serializer = MetadataMapIO.set_nested_algo_configuration(
-            "metadata_writer", config
+            "metadata_writer", config, None
         )
         if metadata_serializer is None:
             logger.error("Error saving metadata")
