@@ -14,19 +14,19 @@ from .utils import VideoAdapter
 from .video_importer import VideoImporter
 from .dialogs import TclTKDialog, TauriDialog
 
-import kwiver
+# import kwiver
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
 from kwiver.vital.config import read_config_file
 from kwiver.vital.types import tag_traits_by_tag
 from kwiver.vital import plugin_management
-from kwiver.vital.config import read_config_file
+from kwiver.vital import vital_logging
 
 vpm = plugin_management.plugin_manager_instance()
 vpm.load_all_plugins()
 
 
-#  anything written to objects of this calss will be also appended to
+#  anything written to objects of this class will be also appended to
 #  log_stream state variable
 class RedirectedStringIO(StringIO):
     def __init__(self, state, *args):
@@ -40,8 +40,6 @@ class RedirectedStringIO(StringIO):
         v = super().write(msg)
         return v
 
-
-from kwiver.vital import vital_logging
 
 logger = vital_logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -76,7 +74,9 @@ class BurnOutApp:
         logging.basicConfig(stream=self.iostream)
 
         # kwiver data structures
-        self.video_adapter = VideoAdapter(VIDEO_ADAPTER_NAME)
+        self.video_adapter = VideoAdapter(
+            VIDEO_ADAPTER_NAME, on_streamer_set=self._on_video_adapter_ready
+        )
         self.video_source = None
         self.video_fps = 30
         self.video_previous_frame_index = -1
@@ -102,6 +102,9 @@ class BurnOutApp:
 
         # Generate UI
         self._build_ui()
+
+    def _on_video_adapter_ready(self):
+        self.state.video_adapter_ready = True
 
     # -------------------------------------------------------------------------
     # tauri helpers
@@ -298,9 +301,9 @@ class BurnOutApp:
     # Reactive state
     # -------------------------------------------------------------------------
 
-    @change("video_current_frame", "video_loaded")
+    @change("video_current_frame", "video_loaded", "video_adapter_ready")
     def on_video_current_frame(self, video_current_frame, video_loaded, **kwargs):
-        if not video_loaded:
+        if not video_loaded or not self.state.video_adapter_ready:
             return
 
         video_current_frame = int(video_current_frame)
