@@ -14,7 +14,6 @@ from .utils import VideoAdapter
 from .video_importer import VideoImporter
 from .dialogs import TclTKDialog, TauriDialog
 
-# import kwiver
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
 from kwiver.vital.config import read_config_file
@@ -84,7 +83,7 @@ class BurnOutApp:
 
         self.server.cli.add_argument(
             "--use-tk",
-            help="Use tcl/tk for file pickers. Usefull if working with the web version",
+            help="Use tcl/tk for file pickers. Useful if working with the web version",
             action="store_true",
         )
 
@@ -141,7 +140,7 @@ class BurnOutApp:
         # Load video if provided
         if self.cli_args.data:
             file_to_load = str(Path(self.cli_args.data).resolve())
-            logger.debug("Load file", file_to_load)
+            logger.debug("Load file %s", file_to_load)
             self.open_file(file_to_load)
 
         # Connect our video adapter
@@ -155,12 +154,12 @@ class BurnOutApp:
 
     @life_cycle.client_exited
     def on_client_exited(self, **kwargs):
-        # make sure we terminate the secondary proccess
+        # make sure we terminate the secondary process
         self.video_importer.close()
 
     @life_cycle.server_exited
     def on_server_exited(self, **kwargs):
-        # make sure we terminate the secondary proccess
+        # make sure we terminate the secondary process
         self.video_importer.close()
 
     # -------------------------------------------------------------------------
@@ -185,7 +184,7 @@ class BurnOutApp:
             self.state.video_loaded = False
             self.video_adapter.clear()
             self.video_previous_frame_index = -1
-        # start extractting metadata in separate process
+        # start extracting metadata in separate process
         self.video_importer.run(file_to_load, pick_video_reader_config(file_to_load))
 
         with self.state as state:
@@ -288,7 +287,6 @@ class BurnOutApp:
         while self.state.video_playing:
             fps = speed_to_fps(self.state.video_play_speed)
             # self.state.video_play_speed_label = f"{round(fps)} fps" enable once we match the reported fps
-            await asyncio.sleep(1.0 / fps)
             with self.state:
                 if self.state.video_current_frame < self.state.video_n_frames:
                     self.state.video_current_frame += 1
@@ -296,6 +294,7 @@ class BurnOutApp:
                     self.state.video_current_frame = 1
                 else:
                     self.state.video_playing = False
+            await asyncio.sleep(1.0 / fps)
 
     # -------------------------------------------------------------------------
     # Reactive state
@@ -331,6 +330,7 @@ class BurnOutApp:
             dict(name=tag_traits_by_tag(key).name(), value=value.as_string())
             for key, value in self.metadata[0]
         ]
+        self.state.flush()  # makes metadata show in the table when using --data CLI arg
 
     @change("video_playing")
     def on_video_playing(self, video_playing, **kwargs):
