@@ -3,7 +3,9 @@ class VideoAdapter:
         self.area_name = name
         self.streamer = None
         self.meta = None
-        self.on_streamer_set = on_streamer_set  # Callback to be called when streamer is set
+        self.on_streamer_set = (
+            on_streamer_set  # Callback to be called when streamer is set
+        )
 
     def set_streamer(self, stream_manager):
         self.streamer = stream_manager
