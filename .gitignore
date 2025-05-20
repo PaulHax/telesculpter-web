@@ -24,6 +24,9 @@ pnpm-debug.log*
 __pycache__
 *egg-info
 *pyc
+.python-version
 
 app/bundles/desktop/build
 app/bundles/desktop/lib_symlinks
+app/bundles/desktop/burnout_0.1.0_amd64.AppImage
+app/bundles/desktop/server.spec
