@@ -76,9 +76,7 @@ def _extract_metadata(video_path, config_path):
         logger.warn("An error was found in the video source algorithm configuration.")
         return
 
-    video_reader = VideoInput.set_nested_algo_configuration(
-        "video_reader", config, None
-    )
+    video_reader = VideoInput.set_nested_algo_configuration("video_reader", config)
     video_reader.open(video_path)
 
     frame_metadata = dict()
@@ -119,7 +117,7 @@ def _write(data, metadata_path, config_path):
     #
     try:
         metadata_serializer = MetadataMapIO.set_nested_algo_configuration(
-            "metadata_writer", config, None
+            "metadata_writer", config
         )
         if metadata_serializer is None:
             logger.error("Error saving metadata")
