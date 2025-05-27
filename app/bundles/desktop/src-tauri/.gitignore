@@ -3,3 +3,5 @@ icons
 server
 target
 www
+sidecar/trame-x86_64-pc-windows-msvc.exe
+sidecar/start_server.obj
