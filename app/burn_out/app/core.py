@@ -191,7 +191,6 @@ class BurnOutApp:
             self.video_source = VideoInput.set_nested_algo_configuration(
                 "video_reader",
                 read_config_file(pick_video_reader_config(file_to_load)),
-                None,
             )
             self.video_source.open(file_to_load)
             state.video_loaded = True
