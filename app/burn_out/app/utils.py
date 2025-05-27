@@ -1,3 +1,21 @@
+import asyncio
+
+
+async def wait_for_network_and_time(server, target_duration):
+    """
+    Waits for the server to complete network operations and then sleeps
+    for the remaining time to match the target duration.
+    """
+    start_time = asyncio.get_event_loop().time()
+    await server.network_completion
+    network_time = asyncio.get_event_loop().time() - start_time
+
+    remaining_time = target_duration - network_time
+
+    if remaining_time > 0:
+        await asyncio.sleep(remaining_time)
+
+
 class VideoAdapter:
     def __init__(self, name, on_streamer_set=None):
         self.area_name = name

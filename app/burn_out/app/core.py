@@ -10,7 +10,7 @@ from trame.widgets import quasar, html, client, rca, tauri
 
 from .assets import ASSETS, KWIVER_CONFIG
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu, AboutDialog
-from .utils import VideoAdapter
+from .utils import VideoAdapter, wait_for_network_and_time
 from .video_importer import VideoImporter
 from .dialogs import TclTKDialog, TauriDialog
 
@@ -309,7 +309,6 @@ class BurnOutApp:
             return 2.0 ** (speed * 0.1)
 
         while self.state.video_playing:
-            fps = speed_to_fps(self.state.video_play_speed)
             # self.state.video_play_speed_label = f"{round(fps)} fps" enable once we match the reported fps
             with self.state:
                 if self.state.video_current_frame < self.state.video_n_frames:
@@ -318,7 +317,11 @@ class BurnOutApp:
                     self.state.video_current_frame = 1
                 else:
                     self.state.video_playing = False
-            await asyncio.sleep(1.0 / fps)
+
+            fps = speed_to_fps(self.state.video_play_speed)
+            target_duration = 1.0 / fps
+            # Wait for frame to sent to the client. Without this, frames will be on the network queue and the video pause button will have many frame of latency.
+            await wait_for_network_and_time(self.server, target_duration)
 
     # -------------------------------------------------------------------------
     # Reactive state
