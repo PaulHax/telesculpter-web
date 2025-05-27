@@ -30,3 +30,5 @@ app/bundles/desktop/build
 app/bundles/desktop/lib_symlinks
 app/bundles/desktop/burnout_0.1.0_amd64.AppImage
 app/bundles/desktop/server.spec
+app/bundles/desktop/Burnout_0.1.0_x64_en-US.msi
+app/bundles/desktop/Burnout_0.1.0_x64-setup.exe

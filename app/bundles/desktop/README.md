@@ -67,14 +67,14 @@ On windows you also need to compile the C++ server launcher.
 
 ```cmd
 cd .\src-tauri\sidecar
-.\compile_sidecar.exe
+.\compile_sidecar.bat
 cd ..\..\
 ```
 
 4. Install tauri-cli(required only once)
 
 ```
-cargo install tauri-cli
+cargo install tauri-cli --version "^1.0"
 ```
 
 5. Run the build script
