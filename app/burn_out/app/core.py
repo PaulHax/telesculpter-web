@@ -21,6 +21,8 @@ from kwiver.vital.types import tag_traits_by_tag
 from kwiver.vital import plugin_management
 from kwiver.vital import vital_logging
 
+DEBUG_LEVEL = logging.DEBUG
+
 vpm = plugin_management.plugin_manager_instance()
 vpm.load_all_plugins()
 
@@ -41,7 +43,22 @@ class RedirectedStringIO(StringIO):
 
 
 logger = vital_logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(DEBUG_LEVEL)
+
+
+# Add a custom handler that outputs to both custom stream and stdout
+class DualOutputHandler(logging.StreamHandler):
+    def __init__(self, custom_stream):
+        super().__init__(custom_stream)
+        self.custom_stream = custom_stream
+
+    def emit(self, record):
+        # Emit to custom stream
+        super().emit(record)
+        # Also emit to stdout
+        console_handler = logging.StreamHandler()
+        console_handler.setFormatter(self.formatter)
+        console_handler.emit(record)
 
 
 VIDEO_ADAPTER_NAME = "active-video"
@@ -70,7 +87,15 @@ class BurnOutApp:
         self.state.video_play_speed_label = ""
         self.state.log_stream = ""
         self.iostream = RedirectedStringIO(self.state)
-        logging.basicConfig(stream=self.iostream)
+
+        dual_handler = DualOutputHandler(self.iostream)
+        dual_handler.setLevel(DEBUG_LEVEL)
+        formatter = logging.Formatter("%(name)s - %(message)s")
+        dual_handler.setFormatter(formatter)
+
+        logging.getLogger().handlers.clear()
+        logging.getLogger().addHandler(dual_handler)
+        logging.getLogger().setLevel(DEBUG_LEVEL)
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(
