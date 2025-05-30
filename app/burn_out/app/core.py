@@ -1,4 +1,3 @@
-import asyncio
 import logging
 from io import StringIO
 from pathlib import Path
@@ -6,13 +5,14 @@ from pathlib import Path
 from trame.app import get_server, asynchronous
 from trame.decorators import TrameApp, change, life_cycle
 from trame.ui.quasar import QLayout
-from trame.widgets import quasar, html, client, rca, tauri
+from trame.widgets import quasar, html, client, rca, tauri, vtk
 
 from .assets import ASSETS, KWIVER_CONFIG
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu, AboutDialog
 from .utils import VideoAdapter, wait_for_network_and_time
 from .video_importer import VideoImporter
 from .dialogs import TclTKDialog, TauriDialog
+from .three_d import setup_vtk_cone_pipeline
 
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
@@ -46,7 +46,7 @@ logger = vital_logging.getLogger(__name__)
 logger.setLevel(DEBUG_LEVEL)
 
 
-# Add a custom handler that outputs to both custom stream and stdout
+# outputs to both custom stream and stdout
 class DualOutputHandler(logging.StreamHandler):
     def __init__(self, custom_stream):
         super().__init__(custom_stream)
@@ -105,6 +105,9 @@ class BurnOutApp:
         self.video_fps = 30
         self.video_previous_frame_index = -1
         self.video_importer = VideoImporter()
+
+        self.state.split_video_3d = 80
+        self.render_window = setup_vtk_cone_pipeline()
 
         self.server.cli.add_argument(
             "--use-tk",
@@ -424,6 +427,7 @@ class BurnOutApp:
             AboutDialog()
             with quasar.QPageContainer():
                 with quasar.QPage():
+                    # Main horizontal splitter (Log vs The Rest)
                     with quasar.QSplitter(
                         v_model=("split_log", 100),
                         horizontal=True,
@@ -432,12 +436,14 @@ class BurnOutApp:
                         separator_style="opacity: 0;",
                     ):
                         with html.Template(raw_attrs=["v-slot:before"]):
+                            # Meta vs Video+3D
                             with quasar.QSplitter(
                                 v_model=("split_meta", 20),
                                 style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
                                 limits=([0, 50],),
                                 separator_style="opacity: 0;",
                             ):
+                                # Meta Table
                                 with html.Template(raw_attrs=["v-slot:before"]):
                                     with quasar.QCard(
                                         flat=True,
@@ -478,6 +484,7 @@ class BurnOutApp:
                                             row_key="name",
                                         )
 
+                                # Video + 3D View
                                 with html.Template(raw_attrs=["v-slot:after"]):
                                     with quasar.QCard(
                                         flat=True,
@@ -486,15 +493,28 @@ class BurnOutApp:
                                         style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
                                     ):
                                         with html.Div(
-                                            classes="col justify-center items-center q-pa-xs"
+                                            classes="col row justify-center items-stretch q-pa-xs"
                                         ):
-                                            rca.RawImageDisplayArea(
-                                                name=VIDEO_ADAPTER_NAME,
-                                                style="object-fit: contain;",
-                                                classes="fit",
-                                            )
+                                            with quasar.QSplitter(
+                                                v_model="split_video_3d",
+                                                classes="col",
+                                                limits=([0, 100],),
+                                                separator_style="opacity: 0;",
+                                            ):
+                                                with html.Template(
+                                                    raw_attrs=["v-slot:before"]
+                                                ):
+                                                    vtk.VtkLocalView(self.render_window)
+                                                with html.Template(
+                                                    raw_attrs=["v-slot:after"]
+                                                ):
+                                                    rca.RawImageDisplayArea(
+                                                        name=VIDEO_ADAPTER_NAME,
+                                                        style="object-fit: contain; display: block;",
+                                                        classes="fit",
+                                                    )
                                         VideoControls(classes="q-px-md")
-
+                        # Log Pane
                         with html.Template(raw_attrs=["v-slot:after"]):
                             with quasar.QCard(
                                 flat=True,

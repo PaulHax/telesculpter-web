@@ -28,3 +28,5 @@ Run the application
     burn-out
 
     burn-out --hot-reload
+
+    burn-out --server --use-tk --data ../videos/09172008flight1tape3_2.mpg
