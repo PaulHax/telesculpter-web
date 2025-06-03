@@ -2,6 +2,9 @@ import logging
 from io import StringIO
 from pathlib import Path
 
+# Import Scene from scene package
+from .scene.scene import Scene
+
 from trame.app import get_server, asynchronous
 from trame.decorators import TrameApp, change, life_cycle
 from trame.ui.quasar import QLayout
@@ -104,8 +107,9 @@ class BurnOutApp:
         self.video_source = None
         self.video_fps = 30
         self.video_previous_frame_index = -1
-        self.video_importer = VideoImporter()
+        self.video_importer = VideoImporter(self.on_metadata_loaded)
 
+        self.scene = Scene(self.server)
         self.state.split_video_3d = 80
         self.render_window = setup_vtk_cone_pipeline()
 
@@ -229,6 +233,9 @@ class BurnOutApp:
             video_fps = self.video_source.frame_rate()
             if video_fps != -1.0:
                 self.video_fps = video_fps
+
+    def on_metadata_loaded(self, metadata):
+        self.scene.set_metadata(metadata)
 
     def exit(self):
         asynchronous.create_task(self.server.stop())
