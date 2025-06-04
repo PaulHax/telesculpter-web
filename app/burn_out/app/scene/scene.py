@@ -235,3 +235,21 @@ class Scene:
         self.sfm_constraints.metadata = metadata
 
         self.camera_map = make_camera_map(self.sfm_constraints, metadata)
+
+        self.server.context.camera_map = {
+            frame_id: {
+                "center": camera.center().tolist(),
+                "rotation": camera.rotation().quaternion(),
+                # "intrinsics": {
+                #     "focal_length": camera.intrinsics().focal_length(),
+                #     "principal_point": [
+                #         camera.intrinsics().principal_point_x(),
+                #         camera.intrinsics().principal_point_y(),
+                #     ],
+                #     "aspect_ratio": camera.intrinsics().aspect_ratio(),
+                #     "skew": camera.intrinsics().skew(),
+                # },
+            }
+            for frame_id, camera in self.camera_map.items()
+        }
+        self.server.controller.update_camera_map()

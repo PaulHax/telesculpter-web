@@ -2,7 +2,6 @@ import logging
 from io import StringIO
 from pathlib import Path
 
-# Import Scene from scene package
 from .scene.scene import Scene
 
 from trame.app import get_server, asynchronous
@@ -15,7 +14,7 @@ from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu, AboutDialog
 from .utils import VideoAdapter, wait_for_network_and_time
 from .video_importer import VideoImporter
 from .dialogs import TclTKDialog, TauriDialog
-from .three_d import setup_vtk_cone_pipeline
+from .world_view import WorldView
 
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp
@@ -111,7 +110,8 @@ class BurnOutApp:
 
         self.scene = Scene(self.server)
         self.state.split_video_3d = 80
-        self.render_window = setup_vtk_cone_pipeline()
+        self.world_view = WorldView(self.server)
+        # self.render_window = self.world_view.setup_vtk_cone_pipeline()
 
         self.server.cli.add_argument(
             "--use-tk",
@@ -431,6 +431,14 @@ class BurnOutApp:
                         self.on_menu_help_manual,
                         self.on_menu_help_about,
                     )
+                    quasar.QBtn(
+                        label="Reset View",
+                        color="primary",
+                        flat=True,
+                        dense=True,
+                        class_="q-ml-md",
+                        click=self.server.controller.reset_world_camera,
+                    )
             AboutDialog()
             with quasar.QPageContainer():
                 with quasar.QPage():
@@ -511,7 +519,8 @@ class BurnOutApp:
                                                 with html.Template(
                                                     raw_attrs=["v-slot:before"]
                                                 ):
-                                                    vtk.VtkLocalView(self.render_window)
+                                                    self.world_view.create_view()
+
                                                 with html.Template(
                                                     raw_attrs=["v-slot:after"]
                                                 ):
