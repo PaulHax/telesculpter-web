@@ -65,16 +65,13 @@ class VideoImporter:
         loop = asyncio.get_event_loop()
 
         # Run the blocking queue.get operation in a thread pool
-        try:
-            metadata = await loop.run_in_executor(None, self.result_queue.get)
-            deserialized_metadata = deserialize(metadata)
-            if deserialized_metadata is not None and self.metadata_callback:
-                if asyncio.iscoroutinefunction(self.metadata_callback):
-                    await self.metadata_callback(deserialized_metadata)
-                else:
-                    self.metadata_callback(deserialized_metadata)
-        except Exception as e:
-            logger.error(f"Error processing metadata results: {e}")
+        metadata = await loop.run_in_executor(None, self.result_queue.get)
+        deserialized_metadata = deserialize(metadata)
+        if deserialized_metadata is not None and self.metadata_callback:
+            if asyncio.iscoroutinefunction(self.metadata_callback):
+                await self.metadata_callback(deserialized_metadata)
+            else:
+                self.metadata_callback(deserialized_metadata)
 
 
 def _worker(queue, result_queue):
@@ -87,8 +84,6 @@ def _worker(queue, result_queue):
             original_metadata = func(*args)
             json_metadata = serialize(original_metadata)
             result_queue.put(json_metadata)
-
-            logger.debug("Serialized metadata to JSON and sent to main process")
         elif func == _write:
             if original_metadata is not None:
                 func(original_metadata, *args)
