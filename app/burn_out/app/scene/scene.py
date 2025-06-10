@@ -234,9 +234,9 @@ class Scene:
         self.sfm_constraints = SFMConstraints()
         self.sfm_constraints.metadata = metadata
 
-        self.camera_map = make_camera_map(self.sfm_constraints, metadata)
+        camera_map = make_camera_map(self.sfm_constraints, metadata)
 
-        self.server.context.camera_map = {
+        camera_map_serialized = {
             frame_id: {
                 "center": camera.center().tolist(),
                 "rotation": camera.rotation().quaternion(),
@@ -250,6 +250,6 @@ class Scene:
                 #     "skew": camera.intrinsics().skew(),
                 # },
             }
-            for frame_id, camera in self.camera_map.items()
+            for frame_id, camera in camera_map.items()
         }
-        self.server.controller.update_camera_map()
+        self.server.controller.update_camera_map(camera_map_serialized)
