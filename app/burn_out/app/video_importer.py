@@ -118,7 +118,6 @@ def _extract_metadata(video_path, config_path):
 
         frame = current_timestamp.get_frame()
         metadata = video_reader.frame_metadata()
-
         if len(metadata) > 0:
             frame_metadata[frame] = metadata
 

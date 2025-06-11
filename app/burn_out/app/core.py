@@ -111,7 +111,6 @@ class BurnOutApp:
         self.scene = Scene(self.server)
         self.state.split_video_3d = 80
         self.world_view = WorldView(self.server)
-        # self.render_window = self.world_view.setup_vtk_cone_pipeline()
 
         self.server.cli.add_argument(
             "--use-tk",
@@ -362,11 +361,12 @@ class BurnOutApp:
 
         self.video_adapter.update_frame(self.video_source.frame_image())
         self.video_previous_frame_index = video_current_frame
-        self.metadata = self.video_source.frame_metadata()
+        metadata = self.video_source.frame_metadata()[0]
         self.state.ui_meta = [
             dict(name=tag_traits_by_tag(key).name(), value=value.as_string())
-            for key, value in self.metadata[0]
+            for key, value in metadata
         ]
+
         self.state.flush()  # makes metadata show in the table when using --data CLI arg
 
     @change("video_playing")

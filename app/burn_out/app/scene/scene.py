@@ -4,6 +4,7 @@ from kwiver.vital.types import (
     SimpleCameraPerspective,
     SimpleCameraIntrinsics,
     RotationD,
+    ned_to_enu,
 )
 from kwiver.vital.types import metadata_tags as mt
 import math
@@ -40,46 +41,59 @@ def intrinsics_from_metadata(metadata, camera_intrinsics=None):
     if camera_intrinsics is None:
         intrinsics = SimpleCameraIntrinsics()
     else:
-        intrinsics = SimpleCameraIntrinsics(
-            camera_intrinsics
-        )  # Try to compute focal length from slant range and target width
+        intrinsics = SimpleCameraIntrinsics(camera_intrinsics)
+
+    if metadata.has(mt.tags.VITAL_META_IMAGE_WIDTH):
+        md_image_width = metadata.find(mt.tags.VITAL_META_IMAGE_WIDTH).as_uint64()
+        if md_image_width > 0:
+            intrinsics.set_image_width(int(md_image_width))
+
+    if metadata.has(mt.tags.VITAL_META_IMAGE_HEIGHT):
+        md_image_height = metadata.find(mt.tags.VITAL_META_IMAGE_HEIGHT).as_uint64()
+        if md_image_height > 0:
+            intrinsics.set_image_height(int(md_image_height))
+
+    # Try to compute focal length
     if metadata.has(mt.tags.VITAL_META_SLANT_RANGE) and metadata.has(
         mt.tags.VITAL_META_TARGET_WIDTH
     ):
         slant_range = metadata.find(mt.tags.VITAL_META_SLANT_RANGE).as_double()
         target_width = metadata.find(mt.tags.VITAL_META_TARGET_WIDTH).as_double()
 
-        # Default image width if not available
         image_width = intrinsics.image_width() if intrinsics.image_width() > 0 else 1920
 
-        # Compute focal length: focal = (image_width * slant_range) / target_width
         focal_length = (image_width * slant_range) / target_width
-        intrinsics.set_focal_length(
-            focal_length
-        )  # Try to compute focal length from horizontal FOV
+        intrinsics.set_focal_length(focal_length)
     elif metadata.has(mt.tags.VITAL_META_SENSOR_HORIZONTAL_FOV):
-        horizontal_fov_rad = metadata.find(
-            mt.tags.VITAL_META_SENSOR_HORIZONTAL_FOV
-        ).as_double()
-        # Default image width if not available
+        horizontal_fov_rad = math.radians(
+            metadata.find(mt.tags.VITAL_META_SENSOR_HORIZONTAL_FOV).as_double()
+        )
         image_width = intrinsics.image_width() if intrinsics.image_width() > 0 else 1920
 
-        # Compute focal length from FOV: focal = (image_width/2) / tan(horizontal_fov/2)
         focal_length = (image_width / 2.0) / math.tan(horizontal_fov_rad / 2.0)
-        intrinsics.set_focal_length(
-            focal_length
-        )  # If vertical FOV is also available, compute aspect ratio
+        intrinsics.set_focal_length(focal_length)
+
+        # If vertical FOV is also available, compute aspect ratio
         if metadata.has(mt.tags.VITAL_META_SENSOR_VERTICAL_FOV):
-            vertical_fov_rad = metadata.find(
-                mt.tags.VITAL_META_SENSOR_VERTICAL_FOV
-            ).as_double()
+            vertical_fov_rad = math.radians(
+                metadata.find(mt.tags.VITAL_META_SENSOR_VERTICAL_FOV).as_double()
+            )
             image_height = (
                 intrinsics.image_height() if intrinsics.image_height() > 0 else 1080
             )
 
             focal_y = (image_height / 2.0) / math.tan(vertical_fov_rad / 2.0)
+            # Note: focal_length here is from horizontal FOV
             aspect_ratio = focal_length / focal_y
             intrinsics.set_aspect_ratio(aspect_ratio)
+
+    # Set principal point to the center of the image if it's currently (0,0)
+    # and image dimensions are now known and non-zero.
+    # This mirrors the C++ kwiver::vital::intrinsics_from_metadata logic.
+    if intrinsics.image_width() > 0 and intrinsics.image_height() > 0:
+        pp_x = intrinsics.image_width() / 2.0
+        pp_y = intrinsics.image_height() / 2.0
+        intrinsics.set_principal_point([pp_x, pp_y])
 
     return intrinsics
 
@@ -91,55 +105,101 @@ def update_camera_from_metadata(camera, metadata):
     """
 
     if metadata.has(mt.tags.VITAL_META_SENSOR_LOCATION):
-        sensor_loc = metadata.find(mt.tags.VITAL_META_SENSOR_LOCATION).data
-        camera.set_center(sensor_loc.location())
+        sensor_loc_object = metadata.find(mt.tags.VITAL_META_SENSOR_LOCATION).data
+        if sensor_loc_object is not None and callable(
+            getattr(sensor_loc_object, "location", None)
+        ):
+            camera.set_center(sensor_loc_object.location())
 
     # Get platform and sensor orientation angles
-    platform_yaw = 0.0
-    platform_pitch = 0.0
-    platform_roll = 0.0
-    sensor_yaw = 0.0
-    sensor_pitch = 0.0
-    sensor_roll = 0.0
+    platform_yaw_deg = 0.0
+    platform_pitch_deg = 0.0
+    platform_roll_deg = 0.0
+    sensor_yaw_deg = 0.0
+    sensor_pitch_deg = 0.0
+    sensor_roll_deg = (
+        0.0  # Initialize sensor_roll_deg, C++ defaults this to 0 if tag is missing
+    )
+
+    has_platform_yaw = False
+    has_platform_pitch = False
+    has_platform_roll = False
+    has_sensor_yaw = False
+    has_sensor_pitch = False
 
     if metadata.has(mt.tags.VITAL_META_PLATFORM_HEADING_ANGLE):
-        platform_yaw = metadata.find(
+        platform_yaw_deg = metadata.find(
             mt.tags.VITAL_META_PLATFORM_HEADING_ANGLE
         ).as_double()
+        has_platform_yaw = True
     if metadata.has(mt.tags.VITAL_META_PLATFORM_PITCH_ANGLE):
-        platform_pitch = metadata.find(
+        platform_pitch_deg = metadata.find(
             mt.tags.VITAL_META_PLATFORM_PITCH_ANGLE
         ).as_double()
+        has_platform_pitch = True
     if metadata.has(mt.tags.VITAL_META_PLATFORM_ROLL_ANGLE):
-        platform_roll = metadata.find(
+        platform_roll_deg = metadata.find(
             mt.tags.VITAL_META_PLATFORM_ROLL_ANGLE
         ).as_double()
+        has_platform_roll = True
 
-    if metadata.has(mt.tags.VITAL_META_SENSOR_YAW_ANGLE):
-        sensor_yaw = metadata.find(mt.tags.VITAL_META_SENSOR_YAW_ANGLE).as_double()
-    if metadata.has(mt.tags.VITAL_META_SENSOR_PITCH_ANGLE):
-        sensor_pitch = metadata.find(mt.tags.VITAL_META_SENSOR_PITCH_ANGLE).as_double()
-    if metadata.has(mt.tags.VITAL_META_SENSOR_ROLL_ANGLE):
-        sensor_roll = (
-            metadata.find(mt.tags.VITAL_META_SENSOR_ROLL_ANGLE).as_double()
-        )  # Create rotation from platform and sensor angles using UAS convention
-    # In UAS convention, we need to combine platform rotation and sensor rotation
-    # Platform rotation: yaw, pitch, roll of the platform/vehicle
-    # Sensor rotation: additional yaw, pitch, roll of the sensor relative to platform
+    if metadata.has(mt.tags.VITAL_META_SENSOR_REL_AZ_ANGLE):
+        sensor_yaw_deg = metadata.find(
+            mt.tags.VITAL_META_SENSOR_REL_AZ_ANGLE
+        ).as_double()
+        has_sensor_yaw = True
+    if metadata.has(mt.tags.VITAL_META_SENSOR_REL_EL_ANGLE):
+        sensor_pitch_deg = metadata.find(
+            mt.tags.VITAL_META_SENSOR_REL_EL_ANGLE
+        ).as_double()
+        has_sensor_pitch = True
+    if metadata.has(mt.tags.VITAL_META_SENSOR_REL_ROLL_ANGLE):
+        sensor_roll_deg = metadata.find(
+            mt.tags.VITAL_META_SENSOR_REL_ROLL_ANGLE
+        ).as_double()
 
-    # Total yaw, pitch, roll is the combination of platform and sensor angles
-    total_yaw = platform_yaw + sensor_yaw
-    total_pitch = platform_pitch + sensor_pitch
-    total_roll = platform_roll + sensor_roll
+    # Condition to match C++ logic in camera_from_metadata.cxx
+    # Sensor roll is used in uas_ypr_to_rotation, and its NaN status matters.
+    # The C++ check requires platform YPR and sensor YP to be present and all angles (including sensor roll) to be non-NaN.
+    condition_met = (
+        has_platform_yaw
+        and has_platform_pitch
+        and has_platform_roll
+        and has_sensor_yaw
+        and has_sensor_pitch  # Sensor roll presence isn't strictly required for the condition, as it defaults to 0
+        and not (
+            math.isnan(platform_yaw_deg)
+            or math.isnan(platform_pitch_deg)
+            or math.isnan(platform_roll_deg)
+            or math.isnan(sensor_yaw_deg)
+            or math.isnan(sensor_pitch_deg)
+            or math.isnan(sensor_roll_deg)
+        )
+    )
 
-    # Create rotation from combined angles (in radians)
-    total_yaw_rad = math.radians(total_yaw)
-    total_pitch_rad = math.radians(total_pitch)
-    total_roll_rad = math.radians(total_roll)
+    if condition_met:
+        platform_yaw_rad = math.radians(platform_yaw_deg)
+        platform_pitch_rad = math.radians(platform_pitch_deg)
+        platform_roll_rad = math.radians(platform_roll_deg)
 
-    rotation = RotationD(total_yaw_rad, total_pitch_rad, total_roll_rad)
+        sensor_yaw_rad = math.radians(sensor_yaw_deg)
+        sensor_pitch_rad = math.radians(sensor_pitch_deg)
+        sensor_roll_rad = math.radians(sensor_roll_deg)
 
-    camera.set_rotation(rotation)
+        platform_rotation_ned = RotationD(
+            platform_yaw_rad, platform_pitch_rad, platform_roll_rad
+        )
+
+        sensor_rotation_ned = RotationD(
+            sensor_yaw_rad, sensor_pitch_rad, sensor_roll_rad
+        )
+
+        combined_rotation_ned = platform_rotation_ned * sensor_rotation_ned
+
+        final_rotation_enu = ned_to_enu(combined_rotation_ned)
+
+        camera.set_rotation(final_rotation_enu)
+
     return camera
 
 
@@ -151,8 +211,6 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
 
     camera_map = {}
 
-    if not metadata_map:
-        return camera_map  # Set up local coordinate system origin from first available metadata
     origin_set = False
     for frame_id, metadata in metadata_map.items():
         if metadata.has(mt.tags.VITAL_META_SENSOR_LOCATION):
@@ -221,112 +279,6 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
     return camera_map
 
 
-def get_frustum_planes(camera, near_clip, far_clip):
-    """
-    Calculates the frustum planes for a SimpleCameraPerspective.
-
-    Args:
-        camera (SimpleCameraPerspective): The camera object.
-        near_clip (float): Distance to the near clipping plane.
-        far_clip (float): Distance to the far clipping plane.
-
-    Returns:
-        list[float]: A flat list of 24 floats representing the 6 frustum planes
-                     (Right, Left, Bottom, Top, Near, Far), each defined by
-                     4 coefficients (A, B, C, D). Normals point inwards.
-    """
-    C_w = np.array(camera.center().tolist())
-    # kwiver.vital.types.RotationD().matrix() returns a list of 3 lists of 3 floats
-    R_wc_list = camera.rotation().matrix()
-    R_wc = np.array(R_wc_list)
-
-    z_axis_w = R_wc[:, 2]  # View direction
-
-    intr = camera.intrinsics()
-    f = intr.focal_length()
-    W = float(camera.image_width())
-    H = float(camera.image_height())
-    pp = intr.principal_point()
-    px = pp[0]
-    py = pp[1]
-
-    if W == 0:
-        W = 1920.0
-    if H == 0:
-        H = 1080.0
-
-    if f == 0:
-        # Avoid division by zero if focal length is invalid
-        # A very small focal length would lead to an extremely wide FOV
-        # and potentially degenerate planes.
-        # Depending on requirements, could raise an error or return None/default.
-        # For now, let's assume f is valid as per typical camera models.
-        # If f is truly 0, the camera model is ill-defined for perspective.
-        # Consider logging a warning or raising an error.
-        # As a fallback, could try to compute f from a default FOV if W,H are known.
-        # For this implementation, we proceed assuming f > 0.
-        # If f is very small, results might be numerically unstable.
-        pass
-
-    # Normals point inwards (positive side of plane Ax+By+Cz+D=0 is "inside")
-
-    # Near Plane
-    # Normal: z_axis_w (points from eye towards scene)
-    # Plane equation: z_axis_w . X - (z_axis_w . C_w + near_clip) = 0
-    n_near_w = z_axis_w
-    D_near = -np.dot(n_near_w, C_w) - near_clip
-    plane_near = [n_near_w[0], n_near_w[1], n_near_w[2], D_near]
-
-    # Far Plane
-    # Normal: -z_axis_w (points from far plane towards eye)
-    # Plane equation: -z_axis_w . X - (-z_axis_w . C_w - far_clip) = 0
-    # which is -z_axis_w . X + z_axis_w . C_w + far_clip = 0
-    n_far_w = -z_axis_w
-    D_far = np.dot(z_axis_w, C_w) + far_clip
-    plane_far = [n_far_w[0], n_far_w[1], n_far_w[2], D_far]
-
-    # Side planes (normals in camera coordinates, then transformed to world)
-    # Camera local axes: X right, Y up, Z forward (out of screen)
-    # Image coordinates: origin top-left, X right, Y down
-
-    # Left Plane: f*x_c + px*z_c = 0. Normal (f,0,px) in cam_coords points right (inward).
-    n_L_c = np.array([f, 0.0, px])
-    n_L_w = R_wc @ n_L_c
-    D_L = -np.dot(n_L_w, C_w)
-    plane_left = [n_L_w[0], n_L_w[1], n_L_w[2], D_L]
-
-    # Right Plane: f*x_c - (W-px)*z_c = 0. Normal (-f,0, W-px) in cam_coords points left (inward).
-    n_R_c = np.array([-f, 0.0, (W - px)])
-    n_R_w = R_wc @ n_R_c
-    D_R = -np.dot(n_R_w, C_w)
-    plane_right = [n_R_w[0], n_R_w[1], n_R_w[2], D_R]
-
-    # Top Plane: f*y_c + py*z_c = 0. Normal (0,f,py) in cam_coords points up (inward, camera Y up).
-    n_T_c = np.array([0.0, f, py])
-    n_T_w = R_wc @ n_T_c
-    D_T = -np.dot(n_T_w, C_w)
-    plane_top = [n_T_w[0], n_T_w[1], n_T_w[2], D_T]
-
-    # Bottom Plane: f*y_c - (H-py)*z_c = 0. Normal (0,-f, H-py) in cam_coords points down (inward).
-    n_B_c = np.array([0.0, -f, (H - py)])
-    n_B_w = R_wc @ n_B_c
-    D_B = -np.dot(n_B_w, C_w)
-    plane_bottom = [n_B_w[0], n_B_w[1], n_B_w[2], D_B]
-
-    # Order for vtkCamera::GetFrustumPlanes: Right, Left, Bottom, Top, Near, Far
-    ordered_planes = [
-        plane_right,
-        plane_left,
-        plane_bottom,
-        plane_top,
-        plane_near,
-        plane_far,
-    ]
-
-    flat_coeffs = [coeff for plane in ordered_planes for coeff in plane]
-    return flat_coeffs
-
-
 @TrameApp()
 class Scene:
     def __init__(self, server):
@@ -338,11 +290,4 @@ class Scene:
         self.sfm_constraints.metadata = metadata
 
         camera_map = make_camera_map(self.sfm_constraints, metadata)
-        camera_map_serialized = {
-            frame_id: {
-                "center": camera.center().tolist(),
-                "planes": get_frustum_planes(camera, near_clip=0.0001, far_clip=0.01),
-            }
-            for frame_id, camera in camera_map.items()
-        }
-        self.server.controller.update_camera_map(camera_map_serialized)
+        self.server.controller.update_camera_map(camera_map)
