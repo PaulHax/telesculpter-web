@@ -6,6 +6,7 @@ from kwiver.vital.types import (
     RotationD,
 )
 from kwiver.vital.types import metadata_tags as mt
+import math
 import numpy as np
 
 
@@ -57,8 +58,6 @@ def intrinsics_from_metadata(metadata, camera_intrinsics=None):
             focal_length
         )  # Try to compute focal length from horizontal FOV
     elif metadata.has(mt.tags.VITAL_META_SENSOR_HORIZONTAL_FOV):
-        import math
-
         horizontal_fov_rad = metadata.find(
             mt.tags.VITAL_META_SENSOR_HORIZONTAL_FOV
         ).as_double()
@@ -134,8 +133,6 @@ def update_camera_from_metadata(camera, metadata):
     total_roll = platform_roll + sensor_roll
 
     # Create rotation from combined angles (in radians)
-    import math
-
     total_yaw_rad = math.radians(total_yaw)
     total_pitch_rad = math.radians(total_pitch)
     total_roll_rad = math.radians(total_roll)
@@ -224,6 +221,112 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
     return camera_map
 
 
+def get_frustum_planes(camera, near_clip, far_clip):
+    """
+    Calculates the frustum planes for a SimpleCameraPerspective.
+
+    Args:
+        camera (SimpleCameraPerspective): The camera object.
+        near_clip (float): Distance to the near clipping plane.
+        far_clip (float): Distance to the far clipping plane.
+
+    Returns:
+        list[float]: A flat list of 24 floats representing the 6 frustum planes
+                     (Right, Left, Bottom, Top, Near, Far), each defined by
+                     4 coefficients (A, B, C, D). Normals point inwards.
+    """
+    C_w = np.array(camera.center().tolist())
+    # kwiver.vital.types.RotationD().matrix() returns a list of 3 lists of 3 floats
+    R_wc_list = camera.rotation().matrix()
+    R_wc = np.array(R_wc_list)
+
+    z_axis_w = R_wc[:, 2]  # View direction
+
+    intr = camera.intrinsics()
+    f = intr.focal_length()
+    W = float(camera.image_width())
+    H = float(camera.image_height())
+    pp = intr.principal_point()
+    px = pp[0]
+    py = pp[1]
+
+    if W == 0:
+        W = 1920.0
+    if H == 0:
+        H = 1080.0
+
+    if f == 0:
+        # Avoid division by zero if focal length is invalid
+        # A very small focal length would lead to an extremely wide FOV
+        # and potentially degenerate planes.
+        # Depending on requirements, could raise an error or return None/default.
+        # For now, let's assume f is valid as per typical camera models.
+        # If f is truly 0, the camera model is ill-defined for perspective.
+        # Consider logging a warning or raising an error.
+        # As a fallback, could try to compute f from a default FOV if W,H are known.
+        # For this implementation, we proceed assuming f > 0.
+        # If f is very small, results might be numerically unstable.
+        pass
+
+    # Normals point inwards (positive side of plane Ax+By+Cz+D=0 is "inside")
+
+    # Near Plane
+    # Normal: z_axis_w (points from eye towards scene)
+    # Plane equation: z_axis_w . X - (z_axis_w . C_w + near_clip) = 0
+    n_near_w = z_axis_w
+    D_near = -np.dot(n_near_w, C_w) - near_clip
+    plane_near = [n_near_w[0], n_near_w[1], n_near_w[2], D_near]
+
+    # Far Plane
+    # Normal: -z_axis_w (points from far plane towards eye)
+    # Plane equation: -z_axis_w . X - (-z_axis_w . C_w - far_clip) = 0
+    # which is -z_axis_w . X + z_axis_w . C_w + far_clip = 0
+    n_far_w = -z_axis_w
+    D_far = np.dot(z_axis_w, C_w) + far_clip
+    plane_far = [n_far_w[0], n_far_w[1], n_far_w[2], D_far]
+
+    # Side planes (normals in camera coordinates, then transformed to world)
+    # Camera local axes: X right, Y up, Z forward (out of screen)
+    # Image coordinates: origin top-left, X right, Y down
+
+    # Left Plane: f*x_c + px*z_c = 0. Normal (f,0,px) in cam_coords points right (inward).
+    n_L_c = np.array([f, 0.0, px])
+    n_L_w = R_wc @ n_L_c
+    D_L = -np.dot(n_L_w, C_w)
+    plane_left = [n_L_w[0], n_L_w[1], n_L_w[2], D_L]
+
+    # Right Plane: f*x_c - (W-px)*z_c = 0. Normal (-f,0, W-px) in cam_coords points left (inward).
+    n_R_c = np.array([-f, 0.0, (W - px)])
+    n_R_w = R_wc @ n_R_c
+    D_R = -np.dot(n_R_w, C_w)
+    plane_right = [n_R_w[0], n_R_w[1], n_R_w[2], D_R]
+
+    # Top Plane: f*y_c + py*z_c = 0. Normal (0,f,py) in cam_coords points up (inward, camera Y up).
+    n_T_c = np.array([0.0, f, py])
+    n_T_w = R_wc @ n_T_c
+    D_T = -np.dot(n_T_w, C_w)
+    plane_top = [n_T_w[0], n_T_w[1], n_T_w[2], D_T]
+
+    # Bottom Plane: f*y_c - (H-py)*z_c = 0. Normal (0,-f, H-py) in cam_coords points down (inward).
+    n_B_c = np.array([0.0, -f, (H - py)])
+    n_B_w = R_wc @ n_B_c
+    D_B = -np.dot(n_B_w, C_w)
+    plane_bottom = [n_B_w[0], n_B_w[1], n_B_w[2], D_B]
+
+    # Order for vtkCamera::GetFrustumPlanes: Right, Left, Bottom, Top, Near, Far
+    ordered_planes = [
+        plane_right,
+        plane_left,
+        plane_bottom,
+        plane_top,
+        plane_near,
+        plane_far,
+    ]
+
+    flat_coeffs = [coeff for plane in ordered_planes for coeff in plane]
+    return flat_coeffs
+
+
 @TrameApp()
 class Scene:
     def __init__(self, server):
@@ -235,20 +338,10 @@ class Scene:
         self.sfm_constraints.metadata = metadata
 
         camera_map = make_camera_map(self.sfm_constraints, metadata)
-
         camera_map_serialized = {
             frame_id: {
                 "center": camera.center().tolist(),
-                "rotation": camera.rotation().quaternion(),
-                # "intrinsics": {
-                #     "focal_length": camera.intrinsics().focal_length(),
-                #     "principal_point": [
-                #         camera.intrinsics().principal_point_x(),
-                #         camera.intrinsics().principal_point_y(),
-                #     ],
-                #     "aspect_ratio": camera.intrinsics().aspect_ratio(),
-                #     "skew": camera.intrinsics().skew(),
-                # },
+                "planes": get_frustum_planes(camera, near_clip=0.0001, far_clip=0.01),
             }
             for frame_id, camera in camera_map.items()
         }
