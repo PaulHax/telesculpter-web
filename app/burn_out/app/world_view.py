@@ -20,13 +20,80 @@ from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 from trame.decorators import TrameApp
 from trame.widgets import vtk as vtk_widgets
 
-from burn_out.app.scene.utils import get_frustum_planes
+from .scene.utils import (
+    get_frustum_planes_from_simple_camera,  # Added
+)
 
 
 colors = vtkNamedColors()
 
-NEAR_CLIP = 0.000001
-FAR_CLIP = 0.001
+NEAR_CLIP = 0.01
+FAR_CLIP = 4.0
+
+
+def build_camera_frustum(
+    planes_coefficients: Sequence[float], out_poly_data: vtkPolyData
+):
+    """
+    Builds a camera frustum including an up-indicator triangle, similar to
+    the C++ BuildCameraFrustum function.
+    """
+    planes_object = vtkPlanes()
+    planes_object.SetFrustumPlanes(planes_coefficients)
+
+    frustum_source = vtkFrustumSource()
+    frustum_source.SetPlanes(planes_object)
+    frustum_source.ShowLinesOff()  # Generates 5 faces (no lines) and 8 points
+    frustum_source.Update()
+
+    # Make a copy of the frustum mesh so we can modify it
+    out_poly_data.DeepCopy(frustum_source.GetOutput())
+    frustum_points = out_poly_data.GetPoints()
+    frustum_polys = out_poly_data.GetPolys()
+
+    if not frustum_points or frustum_points.GetNumberOfPoints() != 8:
+        # Expected 8 points for the frustum (4 near, 4 far)
+        return
+
+    # Points from vtkFrustumSource (ShowLinesOff=True):
+    # Far plane: 0:FBL, 1:FBR, 2:FTR, 3:FTL
+    # Near plane: 4:NBL, 5:NBR, 6:NTR, 7:NTL
+
+    p0_fbl = np.array(frustum_points.GetPoint(0))  # Far Bottom Left
+    p1_fbr = np.array(frustum_points.GetPoint(1))  # Far Bottom Right
+    p2_ftr = np.array(frustum_points.GetPoint(2))  # Far Top Right
+    p3_ftl = np.array(frustum_points.GetPoint(3))  # Far Top Left
+
+    # Calculate the center of the far face
+    center_face = 0.25 * (p0_fbl + p1_fbr + p2_ftr + p3_ftl)
+
+    # Calculate the new tip point for the up-indicator triangle
+    # new = top_edge_midpoint + (top_edge_midpoint - center_face_midpoint_along_up_vector)
+    # Simplified from C++: new = p2 + p3 - center
+    # where p2 and p3 are the top corners of the far plane.
+    tip_coord = p2_ftr + p3_ftl - center_face
+
+    # Insert new point for the tip of the up-indicator
+    tip_point_id = frustum_points.InsertNextPoint(
+        tip_coord[0], tip_coord[1], tip_coord[2]
+    )
+
+    # Create the up-indicator triangle using the far plane's top edge points
+    # and the new tip point.
+    # The C++ code uses original indices 2 and 3 for the triangle.
+    # Index 2 from frustum_source output is FTR.
+    # Index 3 from frustum_source output is FTL.
+    up_triangle = vtkTriangle()
+    up_triangle.GetPointIds().SetId(0, 2)  # Far Top Right (original index 2)
+    up_triangle.GetPointIds().SetId(1, 3)  # Far Top Left (original index 3)
+    up_triangle.GetPointIds().SetId(2, tip_point_id)
+
+    if frustum_polys is None:
+        frustum_polys = vtkCellArray()
+        out_poly_data.SetPolys(frustum_polys)
+
+    frustum_polys.InsertNextCell(up_triangle)
+    out_poly_data.Modified()
 
 
 class Positions_Rep(NamedTuple):
@@ -39,7 +106,7 @@ class Frustums_Rep(NamedTuple):
     poly_data: vtkPolyData  # Holds the combined output of append_poly_data
     mapper: vtkPolyDataMapper
     actor: vtkActor
-    append_poly_data: vtkAppendPolyData  # Filter to combine individual frustums
+    append_poly_data: vtkAppendPolyData
     dummy_input_poly_data: vtkPolyData
 
 
@@ -141,88 +208,19 @@ def create_frustums_rep(renderer: vtkRenderer):
     )
 
 
-def update_frustums_rep(
-    frustums_rep: Frustums_Rep, frustums_generator, display_density: int = 1
-):
+def update_frustums_rep(frustums_rep: Frustums_Rep, frustums, display_density: int = 1):
     frustums_rep.append_poly_data.RemoveAllInputs()
 
     any_frustum_added = False
 
-    for i, planes_coefficients in enumerate(frustums_generator):
+    for i, planes_coefficients in enumerate(frustums):
         if i % display_density != 0:
             continue
 
-        # Expecting 24 float coefficients for the 6 frustum planes
-        if planes_coefficients and len(planes_coefficients) == 24:
-            planes_object = vtkPlanes()
-            planes_object.SetFrustumPlanes(planes_coefficients)
+        individual_frustum_poly_data = vtkPolyData()
+        build_camera_frustum(planes_coefficients, individual_frustum_poly_data)
 
-            frustum_source = vtkFrustumSource()
-            frustum_source.SetPlanes(planes_object)
-            frustum_source.ShowLinesOff()
-            frustum_source.Update()
-
-            individual_frustum_poly_data = vtkPolyData()
-            individual_frustum_poly_data.DeepCopy(frustum_source.GetOutput())
-
-            frustum_points = individual_frustum_poly_data.GetPoints()
-            if frustum_points and frustum_points.GetNumberOfPoints() == 8:
-                # Use Far Plane points instead of Near Plane points
-                pt_ftl_coords = np.array(frustum_points.GetPoint(3))  # Far Top Left
-                pt_ftr_coords = np.array(frustum_points.GetPoint(2))  # Far Top Right
-                pt_fbl_coords = np.array(frustum_points.GetPoint(0))  # Far Bottom Left
-
-                # Geometric 'up' direction from Far Plane's vertical edge (FTL - FBL)
-                # This mimics the C++ approach (which used near plane) but adapted for the far plane.
-                # Quaternion-based calculation for 'up' direction is removed as requested.
-                geom_up_vec = pt_ftl_coords - pt_fbl_coords
-                norm_geom_up_vec = np.linalg.norm(geom_up_vec)
-                if norm_geom_up_vec > 1e-6:
-                    up_direction_for_indicator = geom_up_vec / norm_geom_up_vec
-                else:
-                    # Default to world Y up if geometric up is degenerate
-                    up_direction_for_indicator = np.array([0.0, 1.0, 0.0])
-
-                # Right vector along the top edge of the FAR plane (for scaling the offset)
-                right_vec = pt_ftr_coords - pt_ftl_coords
-                length_right_vec = np.linalg.norm(right_vec)
-                # Ensure length_right_vec is not zero for tip_offset_distance calculation
-                if length_right_vec < 1e-9:
-                    length_right_vec = (
-                        0.01  # Default small length if far plane top edge is a point
-                    )
-
-                # Midpoint of the FAR plane's top edge
-                mid_top_edge = (pt_ftl_coords + pt_ftr_coords) / 2.0
-
-                # Scale factor for the triangle height (0.3 is from TeleSculptor C++ code)
-                tip_offset_distance = length_right_vec * 0.3
-
-                # Calculate the tip point of the indicator triangle
-                tip_coord = (
-                    mid_top_edge + up_direction_for_indicator * tip_offset_distance
-                )
-
-                # Add the new tip point to the polydata's points
-                # The existing points are 0-7. The new point will be 8.
-                tip_point_id = frustum_points.InsertNextPoint(
-                    tip_coord[0], tip_coord[1], tip_coord[2]
-                )
-
-                # Create the triangle cell, using Far Plane top edge points
-                up_triangle = vtkTriangle()
-                up_triangle.GetPointIds().SetId(0, 3)  # FTL
-                up_triangle.GetPointIds().SetId(1, 2)  # FTR
-                up_triangle.GetPointIds().SetId(2, tip_point_id)  # New tip point
-
-                # Add the triangle to the polydata's cells (polygons)
-                polys = individual_frustum_poly_data.GetPolys()
-                if polys is None:
-                    polys = vtkCellArray()
-                    individual_frustum_poly_data.SetPolys(polys)
-                polys.InsertNextCell(up_triangle)
-                individual_frustum_poly_data.Modified()
-
+        if individual_frustum_poly_data.GetNumberOfPoints() > 0:
             frustums_rep.append_poly_data.AddInputData(individual_frustum_poly_data)
             any_frustum_added = True
 
@@ -276,11 +274,12 @@ class WorldView:
         centers = [camera.center().tolist() for camera in camera_map.values()]
         update_positions_rep(self.pipeline.positions_rep, centers)
 
-        frustums_gen = (
-            get_frustum_planes(camera, NEAR_CLIP, FAR_CLIP)
-            for camera in camera_map.values()
+        frustums = (
+            get_frustum_planes_from_simple_camera(cam, NEAR_CLIP, FAR_CLIP)
+            for cam in camera_map.values()
         )
-        update_frustums_rep(self.pipeline.frustums_rep, frustums_gen)
+
+        update_frustums_rep(self.pipeline.frustums_rep, frustums, 400)
 
         self.pipeline.renderer.ResetCamera()
         self.html_view.push_camera()

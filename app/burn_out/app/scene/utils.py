@@ -1,96 +1,110 @@
+from kwiver.vital.types import SimpleCameraPerspective
 import numpy as np
-from kwiver.vital.types import SimpleCameraPerspective  # For type hinting
+from vtkmodules.vtkRenderingCore import vtkCamera
+import math
+from typing import List, NamedTuple
+
+
+class VtkCameraBundle(NamedTuple):
+    camera: vtkCamera
+    aspect_ratio: float
+
+
+def create_vtk_camera_from_simple_camera(
+    simple_cam: SimpleCameraPerspective, near_clip: float, far_clip: float
+) -> VtkCameraBundle:
+    """
+    Creates and configures a vtkCamera from a SimpleCameraPerspective object,
+    similar to the logic in vtkKwiverCamera::BuildCamera.
+    Returns a bundle containing the camera and its calculated aspect ratio.
+    """
+    vtk_cam = vtkCamera()
+    ci = simple_cam.intrinsics()
+
+    image_width = float(ci.image_width())
+    image_height = float(ci.image_height())
+    principal_point = ci.principal_point()
+
+    if image_width <= 0 or image_height <= 0:
+        # Estimate from principal point if not set or invalid
+        if principal_point[0] > 0 and principal_point[1] > 0:
+            image_width = principal_point[0] * 2.0
+            image_height = principal_point[1] * 2.0
+        else:
+            # Fallback if principal point is also not useful
+            image_width = 1.0
+            image_height = 1.0
+
+    pixel_aspect = ci.aspect_ratio()  # pixel_height / pixel_width
+    if pixel_aspect == 0:
+        pixel_aspect = 1.0  # Assume square pixels
+
+    focal_length = ci.focal_length()
+
+    # Avoid division by zero for critical parameters
+    if image_height == 0:
+        image_height = 1e-6
+    if image_width == 0:
+        image_width = 1e-6
+    if focal_length == 0:
+        focal_length = 1e-6
+
+    combined_aspect_ratio = pixel_aspect * image_width / image_height
+
+    # FOV (SetViewAngle is in degrees, for the vertical direction)
+    fov_rad = 2.0 * math.atan(0.5 * image_height / focal_length)
+    fov_deg = math.degrees(fov_rad)
+    vtk_cam.SetViewAngle(fov_deg)
+
+    # Camera pose
+    center_w = np.array(simple_cam.center().tolist())
+    R_wc = np.array(simple_cam.rotation().matrix())  # World from Camera matrix
+
+    view_dir_w = R_wc[:, 2]
+    up_dir_w = -R_wc[:, 1]
+
+    vtk_cam.SetPosition(center_w[0], center_w[1], center_w[2])
+    vtk_cam.SetViewUp(up_dir_w[0], up_dir_w[1], up_dir_w[2])
+
+    distance_to_focal_point = vtk_cam.GetDistance()
+    if np.linalg.norm(view_dir_w) < 1e-6:
+        view_dir_w_norm = np.array([0.0, 0.0, 1.0])
+    else:
+        view_dir_w_norm = view_dir_w / np.linalg.norm(view_dir_w)
+
+    focal_point_w = center_w + view_dir_w_norm * distance_to_focal_point
+    vtk_cam.SetFocalPoint(focal_point_w[0], focal_point_w[1], focal_point_w[2])
+
+    vtk_cam.SetClippingRange(near_clip, far_clip)
+
+    return VtkCameraBundle(camera=vtk_cam, aspect_ratio=combined_aspect_ratio)
 
 
 def get_frustum_planes(
-    camera: SimpleCameraPerspective, near_clip: float, far_clip: float
-):
+    camera_bundle: VtkCameraBundle,
+) -> List[float]:
     """
-    Calculates the frustum planes for a SimpleCameraPerspective.
-
-    Args:
-        camera (SimpleCameraPerspective): The camera object.
-        near_clip (float): Distance to the near clipping plane.
-        far_clip (float): Distance to the far clipping plane.
-
-    Returns:
-        list[float]: A flat list of 24 floats representing the 6 frustum planes
-                     (Right, Left, Bottom, Top, Near, Far), each defined by
-                     4 coefficients (A, B, C, D). Normals point inwards.
+    Calculates the frustum planes for a vtkCamera, using aspect ratio from bundle.
+    The planes will have normals pointing OUTSIDE the frustum.
+    Order: Right, Left, Bottom, Top, Near, Far.
     """
-    C_w = np.array(camera.center().tolist())
-    # kwiver.vital.types.RotationD().matrix() returns a list of 3 lists of 3 floats
-    R_wc_list = camera.rotation().matrix()
-    R_wc = np.array(R_wc_list)
+    vtk_cam = camera_bundle.camera
+    aspect = camera_bundle.aspect_ratio
 
-    z_axis_w = R_wc[:, 2]  # View direction
+    planes_coeffs = [0.0] * 24
+    vtk_cam.GetFrustumPlanes(aspect, planes_coeffs)
 
-    intr = camera.intrinsics()
-    f = intr.focal_length()
-    W = float(intr.image_width())  # Corrected: use intrinsics object
-    H = float(intr.image_height())  # Corrected: use intrinsics object
-    pp = intr.principal_point()
-    px = pp[0]
-    py = pp[1]
+    return planes_coeffs
 
-    # Avoid division by zero if dimensions or focal length are zero
-    if W == 0:
-        W = 1e-6
-    if H == 0:
-        H = 1e-6
-    if f == 0:
-        f = 1e-6
 
-    # Normals point inwards (positive side of plane Ax+By+Cz+D=0 is "inside")
-
-    # Near Plane
-    n_near_w = z_axis_w
-    D_near = -np.dot(n_near_w, C_w) - near_clip
-    plane_near = [n_near_w[0], n_near_w[1], n_near_w[2], D_near]
-
-    # Far Plane
-    n_far_w = -z_axis_w
-    D_far = np.dot(z_axis_w, C_w) + far_clip
-    plane_far = [n_far_w[0], n_far_w[1], n_far_w[2], D_far]
-
-    # Side planes (normals in camera coordinates, then transformed to world)
-    # Assuming camera local axes: X right, Y up (consistent with common 3D graphics), Z forward (out of screen)
-    # And image coordinates: origin top-left, X right, Y down.
-    # The original formulas are kept, assuming they align with kwiver's camera model conventions.
-
-    # Left Plane: Normal (f,0,px) in cam_coords points right (inward).
-    n_L_c = np.array([f, 0.0, px])
-    n_L_w = R_wc @ n_L_c
-    D_L = -np.dot(n_L_w, C_w)
-    plane_left = [n_L_w[0], n_L_w[1], n_L_w[2], D_L]
-
-    # Right Plane: Normal (-f,0, W-px) in cam_coords points left (inward).
-    n_R_c = np.array([-f, 0.0, (W - px)])
-    n_R_w = R_wc @ n_R_c
-    D_R = -np.dot(n_R_w, C_w)
-    plane_right = [n_R_w[0], n_R_w[1], n_R_w[2], D_R]
-
-    # Top Plane: Normal (0,f,py) in cam_coords points up (inward, assuming camera Y up).
-    n_T_c = np.array([0.0, f, py])
-    n_T_w = R_wc @ n_T_c
-    D_T = -np.dot(n_T_w, C_w)
-    plane_top = [n_T_w[0], n_T_w[1], n_T_w[2], D_T]
-
-    # Bottom Plane: Normal (0,-f, H-py) in cam_coords points down (inward).
-    n_B_c = np.array([0.0, -f, (H - py)])
-    n_B_w = R_wc @ n_B_c
-    D_B = -np.dot(n_B_w, C_w)
-    plane_bottom = [n_B_w[0], n_B_w[1], n_B_w[2], D_B]
-
-    # Order for vtkCamera::GetFrustumPlanes: Right, Left, Bottom, Top, Near, Far
-    ordered_planes = [
-        plane_right,
-        plane_left,
-        plane_bottom,
-        plane_top,
-        plane_near,
-        plane_far,
-    ]
-
-    flat_coeffs = [coeff for plane in ordered_planes for coeff in plane]
-    return flat_coeffs
+def get_frustum_planes_from_simple_camera(
+    simple_cam: SimpleCameraPerspective, near_clip: float, far_clip: float
+) -> List[float]:
+    """
+    Creates a vtkCamera from a SimpleCameraPerspective and then calculates its frustum planes.
+    """
+    camera_bundle = create_vtk_camera_from_simple_camera(
+        simple_cam, near_clip, far_clip
+    )
+    planes_coeffs = get_frustum_planes(camera_bundle)
+    return planes_coeffs
