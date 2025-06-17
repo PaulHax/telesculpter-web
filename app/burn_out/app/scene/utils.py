@@ -81,12 +81,16 @@ def create_vtk_camera_from_simple_camera(
 
 
 def get_frustum_planes(
-    camera_bundle: VtkCameraBundle,
+    camera_bundle: VtkCameraBundle, scale: float = 1.0
 ) -> List[float]:
     """
     Calculates the frustum planes for a vtkCamera, using aspect ratio from bundle.
     The planes will have normals pointing OUTSIDE the frustum.
     Order: Right, Left, Bottom, Top, Near, Far.
+
+    Parameters:
+        camera_bundle: Bundle containing the vtkCamera and its aspect ratio
+        scale: Scale factor for the frustum size (1.0 = original size)
     """
     vtk_cam = camera_bundle.camera
     aspect = camera_bundle.aspect_ratio
@@ -94,17 +98,68 @@ def get_frustum_planes(
     planes_coeffs = [0.0] * 24
     vtk_cam.GetFrustumPlanes(aspect, planes_coeffs)
 
+    if scale == 1.0:
+        return planes_coeffs
+
+    # Each plane is represented by 4 coefficients (A, B, C, D) in the equation Ax + By + Cz + D = 0
+    # To scale a plane relative to the camera center, we need to adjust the D coefficient
+
+    # Get camera center (position)
+    camera_pos = np.array(vtk_cam.GetPosition())
+
+    # Process each plane (6 planes total: Right, Left, Bottom, Top, Near, Far)
+    for i in range(6):
+        # Get the normal vector (A, B, C) for this plane
+        normal = np.array(planes_coeffs[i * 4 : i * 4 + 3])
+
+        # The original D coefficient
+        d_orig = planes_coeffs[i * 4 + 3]
+
+        # Calculate the distance from the camera center to the plane
+        # Using the plane equation: Ax + By + Cz + D = 0
+        # distance = |Ax + By + Cz + D| / √(A² + B² + C²)
+        # Since we're using normalized normals, the denominator is 1
+        dist_to_plane = abs(np.dot(normal, camera_pos) + d_orig)
+
+        # To scale the plane's distance from the camera center:
+        # 1. First, determine if the plane is "in front of" or "behind" the camera
+        # (we use the sign of Ax + By + Cz + D)
+        sign = 1 if np.dot(normal, camera_pos) + d_orig > 0 else -1
+
+        # 2. Adjust the distance by scale factor
+        new_dist = dist_to_plane * scale
+
+        # 3. Calculate the new D coefficient
+        # new_D = -dot(normal, point_on_plane)
+        # For a point on the plane at distance new_dist from camera along normal:
+        # point_on_plane = camera_pos + normal * new_dist * sign
+        # So new_D = -dot(normal, camera_pos + normal * new_dist * sign)
+        #          = -dot(normal, camera_pos) - new_dist * sign
+        new_d = -np.dot(normal, camera_pos) - new_dist * sign
+
+        # Update the D coefficient in the planes array
+        planes_coeffs[i * 4 + 3] = new_d
+
     return planes_coeffs
 
 
 def get_frustum_planes_from_simple_camera(
-    simple_cam: SimpleCameraPerspective, near_clip: float, far_clip: float
+    simple_cam: SimpleCameraPerspective,
+    near_clip: float,
+    far_clip: float,
+    scale: float = 1.0,
 ) -> List[float]:
     """
     Creates a vtkCamera from a SimpleCameraPerspective and then calculates its frustum planes.
+
+    Parameters:
+        simple_cam: The SimpleCameraPerspective object
+        near_clip: The near clipping plane distance
+        far_clip: The far clipping plane distance
+        scale: Scale factor for the frustum size (1.0 = original size)
     """
     camera_bundle = create_vtk_camera_from_simple_camera(
         simple_cam, near_clip, far_clip
     )
-    planes_coeffs = get_frustum_planes(camera_bundle)
+    planes_coeffs = get_frustum_planes(camera_bundle, scale)
     return planes_coeffs

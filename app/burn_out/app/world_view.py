@@ -17,7 +17,7 @@ from vtkmodules.vtkRenderingCore import (
 from vtkmodules.vtkFiltersSources import vtkFrustumSource
 from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 
-from trame.decorators import TrameApp
+from trame.decorators import TrameApp, change
 from trame.widgets import vtk as vtk_widgets
 
 from .scene.utils import (
@@ -29,6 +29,7 @@ colors = vtkNamedColors()
 
 NEAR_CLIP = 0.01
 FAR_CLIP = 4.0
+FRUSTUM_SCALE = 0.001
 
 
 def build_camera_frustum(
@@ -110,9 +111,16 @@ class Frustums_Rep(NamedTuple):
     dummy_input_poly_data: vtkPolyData
 
 
+class ActiveFrustum_Rep(NamedTuple):
+    poly_data: vtkPolyData
+    mapper: vtkPolyDataMapper
+    actor: vtkActor
+
+
 class Pipeline(NamedTuple):
     positions_rep: Positions_Rep
     frustums_rep: Frustums_Rep
+    active_frustum_rep: ActiveFrustum_Rep
     renderer: vtkRenderer
     render_window: vtkRenderWindow
 
@@ -208,6 +216,26 @@ def create_frustums_rep(renderer: vtkRenderer):
     )
 
 
+def create_active_frustum_rep(renderer: vtkRenderer):
+    poly_data = vtkPolyData()
+
+    mapper = vtkPolyDataMapper()
+    mapper.SetInputData(poly_data)
+
+    actor = vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(colors.GetColor3d("White"))
+    actor.GetProperty().SetRepresentationToWireframe()
+
+    renderer.AddActor(actor)
+
+    return ActiveFrustum_Rep(
+        poly_data=poly_data,
+        mapper=mapper,
+        actor=actor,
+    )
+
+
 def update_frustums_rep(frustums_rep: Frustums_Rep, frustums, display_density: int = 1):
     frustums_rep.append_poly_data.RemoveAllInputs()
 
@@ -233,6 +261,14 @@ def update_frustums_rep(frustums_rep: Frustums_Rep, frustums, display_density: i
     frustums_rep.poly_data.Modified()
 
 
+def update_active_frustum_rep(active_frustum_rep: ActiveFrustum_Rep, frustum_planes):
+    if frustum_planes:
+        build_camera_frustum(frustum_planes, active_frustum_rep.poly_data)
+    else:
+        active_frustum_rep.poly_data.Initialize()
+    active_frustum_rep.poly_data.Modified()
+
+
 def create_pipeline():
     renderer = vtkRenderer()
     renderer.ResetCamera()
@@ -244,6 +280,7 @@ def create_pipeline():
     return Pipeline(
         positions_rep=create_camera_position_rep(renderer),
         frustums_rep=create_frustums_rep(renderer),
+        active_frustum_rep=create_active_frustum_rep(renderer),
         renderer=renderer,
         render_window=render_window,
     )
@@ -255,6 +292,9 @@ class WorldView:
         self.server = server
         self.server.controller.update_camera_map.add(self.update_camera_map)
         self.pipeline = create_pipeline()
+        self.active_camera_id = None
+        self.camera_map = {}
+        self._camera_reset_done = False  # Track if camera has been reset already
 
     def create_view(self):
         self.html_view = vtk_widgets.VtkLocalView(
@@ -267,20 +307,54 @@ class WorldView:
     def update_camera_map(self, camera_map):
         self.camera_map = camera_map
         self._update_cameras()
+        self._update_active_camera_rep()
+
+    @change("video_current_frame")
+    def update_active_camera(self, **kwargs):
+        self.active_camera_id = self.server.state.video_current_frame
+        self._update_active_camera_rep()
+
+    def _update_active_camera_rep(self):
+        camera_map = getattr(self, "camera_map", {})
+        active_camera_id = getattr(self, "active_camera_id", None)
+        active_camera = camera_map.get(active_camera_id)
+
+        if active_camera:
+            active_frustum_planes = get_frustum_planes_from_simple_camera(
+                active_camera,
+                NEAR_CLIP,
+                FAR_CLIP,
+                FRUSTUM_SCALE * 2.0,
+            )
+            update_active_frustum_rep(
+                self.pipeline.active_frustum_rep, active_frustum_planes
+            )
+            self.pipeline.active_frustum_rep.actor.SetVisibility(True)
+        else:
+            update_active_frustum_rep(self.pipeline.active_frustum_rep, None)
+            self.pipeline.active_frustum_rep.actor.SetVisibility(False)
+        self.html_view.update()
 
     def _update_cameras(self):
-        camera_map = self.camera_map
-
+        camera_map = getattr(self, "camera_map", {})
         centers = [camera.center().tolist() for camera in camera_map.values()]
         update_positions_rep(self.pipeline.positions_rep, centers)
-
         frustums = (
-            get_frustum_planes_from_simple_camera(cam, NEAR_CLIP, FAR_CLIP)
+            get_frustum_planes_from_simple_camera(
+                cam,
+                NEAR_CLIP,
+                FAR_CLIP,
+                FRUSTUM_SCALE,
+            )
             for cam in camera_map.values()
         )
 
-        update_frustums_rep(self.pipeline.frustums_rep, frustums, 400)
+        update_frustums_rep(self.pipeline.frustums_rep, frustums, 10)
 
-        self.pipeline.renderer.ResetCamera()
-        self.html_view.push_camera()
+        # Only reset camera the first time with a valid camera_map
+        if camera_map and not self._camera_reset_done:
+            self.pipeline.renderer.ResetCamera()
+            self.html_view.push_camera()
+            self._camera_reset_done = True
+
         self.html_view.update()
