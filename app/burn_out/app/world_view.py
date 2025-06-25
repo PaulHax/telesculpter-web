@@ -19,17 +19,22 @@ from vtkmodules.vtkFiltersCore import vtkAppendPolyData
 
 from trame.decorators import TrameApp, change
 from trame.widgets import vtk as vtk_widgets
+from trame.app import asynchronous
+import logging
 
 from .scene.utils import (
     get_frustum_planes_from_simple_camera,  # Added
 )
+from .utils import create_throttler
 
 
 colors = vtkNamedColors()
+logger = logging.getLogger(__name__)
 
 NEAR_CLIP = 0.01
 FAR_CLIP = 4.0
 FRUSTUM_SCALE = 0.001
+UPDATE_THROTTLE_INTERVAL = 0.1  # 10fps during video playback
 
 
 def build_camera_frustum(
@@ -295,6 +300,7 @@ class WorldView:
         self.active_camera_id = None
         self.camera_map = {}
         self._camera_reset_done = False  # Track if camera has been reset already
+        self._throttled_update = create_throttler(UPDATE_THROTTLE_INTERVAL)
 
     def create_view(self):
         self.html_view = vtk_widgets.VtkLocalView(
@@ -307,10 +313,13 @@ class WorldView:
     def update_camera_map(self, camera_map):
         self.camera_map = camera_map
         self._update_cameras()
-        self._update_active_camera_rep()
+        # Update active camera for initial display when camera map is loaded
+        if camera_map:
+            self.active_camera_id = self.server.state.video_current_frame
+            self._update_active_camera_rep()
 
     @change("video_current_frame")
-    def update_active_camera(self, **kwargs):
+    def update_active_camera(self, **_):
         self.active_camera_id = self.server.state.video_current_frame
         self._update_active_camera_rep()
 
@@ -333,7 +342,10 @@ class WorldView:
         else:
             update_active_frustum_rep(self.pipeline.active_frustum_rep, None)
             self.pipeline.active_frustum_rep.actor.SetVisibility(False)
-        self.html_view.update()
+
+        # Use throttled updates to prevent interference with video timing
+        # Fixes WSL-specific bug where VTK updates interfere with video playback timing
+        asynchronous.create_task(self._throttled_update(self.html_view.update))
 
     def _update_cameras(self):
         camera_map = getattr(self, "camera_map", {})

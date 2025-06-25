@@ -7,7 +7,7 @@ from .scene.scene import Scene
 from trame.app import get_server, asynchronous
 from trame.decorators import TrameApp, change, life_cycle
 from trame.ui.quasar import QLayout
-from trame.widgets import quasar, html, client, rca, tauri, vtk
+from trame.widgets import quasar, html, client, rca, tauri
 
 from .assets import ASSETS, KWIVER_CONFIG
 from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu, AboutDialog
