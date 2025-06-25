@@ -1,4 +1,59 @@
 import asyncio
+import time
+from trame.app import asynchronous
+
+
+def create_throttler(interval):
+    """
+    Returns a throttled_call function that:
+    1. Runs immediately on first call or after throttle interval
+    2. Ensures the last request always gets executed after throttle time
+    3. Supports both sync and async functions
+
+    Args:
+        interval: Minimum time between function executions in seconds
+
+    Returns:
+        async function that accepts either a sync or async function to throttle
+    """
+    # State held in closure
+    last_run_time = 0
+    pending_task = None
+    has_pending_request = False
+
+    async def _delayed_call(func, delay):
+        nonlocal last_run_time, has_pending_request
+        await asyncio.sleep(delay)
+        if has_pending_request:  # Only run if there's still a pending request
+            last_run_time = time.time()
+            has_pending_request = False
+            if asyncio.iscoroutinefunction(func):
+                await func()
+            else:
+                func()
+
+    async def throttled_call(func):
+        nonlocal last_run_time, pending_task, has_pending_request
+
+        current_time = time.time()
+        time_since_last_run = current_time - last_run_time
+
+        if time_since_last_run >= interval:
+            # Run immediately - first call or enough time has passed
+            last_run_time = current_time
+            has_pending_request = False
+            if asyncio.iscoroutinefunction(func):
+                await func()
+            else:
+                func()
+        else:
+            # Schedule for later and mark that we have a pending request
+            has_pending_request = True
+            if pending_task is None or pending_task.done():
+                delay = interval - time_since_last_run
+                pending_task = asynchronous.create_task(_delayed_call(func, delay))
+
+    return throttled_call
 
 
 async def wait_for_network_and_time(server, target_duration):
