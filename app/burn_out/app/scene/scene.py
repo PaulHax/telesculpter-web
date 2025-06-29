@@ -5,6 +5,9 @@ from kwiver.vital.types import (
     SimpleCameraIntrinsics,
     RotationD,
     ned_to_enu,
+    LocalCartesian,
+    GeoPoint,
+    geodesy,
 )
 from kwiver.vital.types import metadata_tags as mt
 import math
@@ -213,21 +216,10 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
 
     origin_set = False
     for frame_id, metadata in metadata_map.items():
-        if metadata.has(mt.tags.VITAL_META_SENSOR_LOCATION):
-            if not origin_set:
-                try:
-                    sensor_loc = metadata.find(mt.tags.VITAL_META_SENSOR_LOCATION).data
-                    local_geo_cs.geo_origin = sensor_loc
-                    origin_set = True
-                except RuntimeError as e:
-                    if "No geo-conversion functor is registered" in str(e):
-                        print(
-                            f"Warning: Geodetic conversion not available, skipping geo origin setup: {e}"
-                        )
-                        # Continue without setting geo origin
-                        pass
-                    else:
-                        raise
+        if metadata.has(mt.tags.VITAL_META_SENSOR_LOCATION) and not origin_set:
+            sensor_loc = metadata.find(mt.tags.VITAL_META_SENSOR_LOCATION).data
+            local_geo_cs.geo_origin = sensor_loc
+            origin_set = True
             break
 
     # Create cameras from metadata
@@ -252,29 +244,27 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
 
     # Update local origin to mean of camera positions if we have cameras
     if camera_centers and origin_set:
+        # Create LocalCartesian converter with current origin
+        origin_geo = local_geo_cs.geo_origin
+        converter = LocalCartesian(origin_geo, 0.0)
+        
         # Convert to local coordinates and compute mean
         local_centers = []
         for center in camera_centers:
-            local_center = local_geo_cs.geo_to_local(center)
-            local_centers.append([local_center.x(), local_center.y(), local_center.z()])
+            # Convert numpy array center to GeoPoint, then to local cartesian
+            center_geo = GeoPoint(center, geodesy.SRID.lat_lon_WGS84)
+            local_center = converter.convert_to_cartesian(center_geo)
+            local_centers.append([local_center[0], local_center[1], local_center[2]])
 
         # Compute mean center
-        mean_center = np.mean(
-            local_centers, axis=0
-        )  # Convert back to geographic coordinates and update origin
-        from kwiver.vital.types import Vector3d
-
-        mean_local = Vector3d(mean_center[0], mean_center[1], mean_center[2])
-        mean_geo = local_geo_cs.local_to_geo(mean_local)
-        try:
-            local_geo_cs.geo_origin = mean_geo
-        except RuntimeError as e:
-            if "No geo-conversion functor is registered" in str(e):
-                print(
-                    f"Warning: Geodetic conversion not available, skipping geo origin update: {e}"
-                )
-            else:
-                raise
+        mean_center = np.mean(local_centers, axis=0)
+        
+        # Convert back to geographic coordinates and update origin
+        mean_local = np.array([mean_center[0], mean_center[1], mean_center[2]])
+        mean_geo = GeoPoint()
+        converter.convert_from_cartesian(mean_local, mean_geo)
+        
+        local_geo_cs.geo_origin = mean_geo
 
     return camera_map
 
