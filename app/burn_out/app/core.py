@@ -98,7 +98,17 @@ class BurnOutApp:
         logging.getLogger().handlers.clear()
         logging.getLogger().addHandler(dual_handler)
         logging.getLogger().setLevel(DEBUG_LEVEL)
-
+        
+        # Reduce verbosity for third-party libraries while keeping GUI logs detailed
+        logging.getLogger("trame").setLevel(logging.WARNING)
+        logging.getLogger("trame.core").setLevel(logging.WARNING) 
+        logging.getLogger("trame.app").setLevel(logging.WARNING)
+        logging.getLogger("trame_server").setLevel(logging.WARNING)
+        logging.getLogger("trame_server.state").setLevel(logging.WARNING)
+        logging.getLogger("trame_server.utils").setLevel(logging.WARNING)  
+        logging.getLogger("trame_client").setLevel(logging.WARNING)
+        logging.getLogger("wslink").setLevel(logging.WARNING)
+        
         # kwiver data structures
         self.video_adapter = VideoAdapter(
             VIDEO_ADAPTER_NAME, on_streamer_set=self._on_video_adapter_ready
