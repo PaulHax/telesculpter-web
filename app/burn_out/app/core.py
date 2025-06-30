@@ -98,17 +98,15 @@ class BurnOutApp:
         logging.getLogger().handlers.clear()
         logging.getLogger().addHandler(dual_handler)
         logging.getLogger().setLevel(DEBUG_LEVEL)
-        
-        # Reduce verbosity for third-party libraries while keeping GUI logs detailed
         logging.getLogger("trame").setLevel(logging.WARNING)
-        logging.getLogger("trame.core").setLevel(logging.WARNING) 
+        logging.getLogger("trame.core").setLevel(logging.WARNING)
         logging.getLogger("trame.app").setLevel(logging.WARNING)
         logging.getLogger("trame_server").setLevel(logging.WARNING)
         logging.getLogger("trame_server.state").setLevel(logging.WARNING)
-        logging.getLogger("trame_server.utils").setLevel(logging.WARNING)  
+        logging.getLogger("trame_server.utils").setLevel(logging.WARNING)
         logging.getLogger("trame_client").setLevel(logging.WARNING)
         logging.getLogger("wslink").setLevel(logging.WARNING)
-        
+
         # kwiver data structures
         self.video_adapter = VideoAdapter(
             VIDEO_ADAPTER_NAME, on_streamer_set=self._on_video_adapter_ready
@@ -119,7 +117,6 @@ class BurnOutApp:
         self.video_importer = VideoImporter(self.on_metadata_loaded)
 
         self.scene = Scene(self.server)
-        self.state.split_video_3d = 80
         self.world_view = WorldView(self.server)
 
         self.server.cli.add_argument(
@@ -301,9 +298,9 @@ class BurnOutApp:
     def on_menu_view_toggle_meta(self):
         self.state.show_view_metadata = not self.state.show_view_metadata
         if self.state.show_view_metadata:
-            self.state.split_meta = 20
+            self.state.split_meta_video = 50
         else:
-            self.state.split_meta = 0
+            self.state.split_meta_video = 0
 
     def on_menu_view_toggle_log(self):
         self.state.show_view_log = not self.state.show_view_log
@@ -452,7 +449,7 @@ class BurnOutApp:
             AboutDialog()
             with quasar.QPageContainer():
                 with quasar.QPage():
-                    # Main horizontal splitter (Log vs The Rest)
+                    # Main horizontal splitter (Content + Video Controls vs Log)
                     with quasar.QSplitter(
                         v_model=("split_log", 100),
                         horizontal=True,
@@ -461,85 +458,100 @@ class BurnOutApp:
                         separator_style="opacity: 0;",
                     ):
                         with html.Template(raw_attrs=["v-slot:before"]):
-                            # Meta vs Video+3D
-                            with quasar.QSplitter(
-                                v_model=("split_meta", 20),
+                            # Vertical layout: Main content area above, video controls below
+                            with html.Div(
+                                classes="column",
                                 style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
-                                limits=([0, 50],),
-                                separator_style="opacity: 0;",
                             ):
-                                # Meta Table
-                                with html.Template(raw_attrs=["v-slot:before"]):
-                                    with quasar.QCard(
-                                        flat=True,
-                                        bordered=True,
-                                        v_show=("show_view_metadata", True),
-                                        classes="absolute column justify-between content-stretch",
-                                        style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                                # Main content area: Left side (Meta + Video) vs Right side (3D View)
+                                with html.Div(classes="col", style="min-height: 0;"):
+                                    with quasar.QSplitter(
+                                        v_model=("split_left_right", 50),
+                                        style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
+                                        limits=([20, 80],),
+                                        separator_style="opacity: 0;",
                                     ):
-                                        quasar.QTable(
-                                            style="width: 100%; height: 100%;",
-                                            dense=True,
-                                            flat=True,
-                                            bordered=True,
-                                            hide_header=True,
-                                            hide_bottom=True,
-                                            separator="cell",
-                                            rows_per_page_options=0,
-                                            rows=("ui_meta", []),
-                                            columns=(
-                                                "ui_cols",
-                                                [
-                                                    dict(
-                                                        name="name",
-                                                        label="Key",
-                                                        field="name",
-                                                        classes="text-weight-medium",
-                                                    ),
-                                                    dict(
-                                                        name="value",
-                                                        label="Value",
-                                                        field="value",
-                                                        classes="ellipsis",
-                                                        headerStyle="width: 45%",
-                                                        align="left",
-                                                    ),
-                                                ],
-                                            ),
-                                            row_key="name",
-                                        )
-
-                                # Video + 3D View
-                                with html.Template(raw_attrs=["v-slot:after"]):
-                                    with quasar.QCard(
-                                        flat=True,
-                                        bordered=True,
-                                        classes="absolute column justify-between content-stretch",
-                                        style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
-                                    ):
-                                        with html.Div(
-                                            classes="col row justify-center items-stretch q-pa-xs"
-                                        ):
+                                        # Left side: Meta Table above 2D Video
+                                        with html.Template(raw_attrs=["v-slot:before"]):
                                             with quasar.QSplitter(
-                                                v_model="split_video_3d",
-                                                classes="col",
-                                                limits=([0, 100],),
+                                                v_model=("split_meta_video", 50),
+                                                horizontal=True,
+                                                style="position: absolute; top: 0; left: 0; bottom: 0; right: 0;",
+                                                limits=([0, 70],),
                                                 separator_style="opacity: 0;",
                                             ):
+                                                # Meta Table
                                                 with html.Template(
                                                     raw_attrs=["v-slot:before"]
                                                 ):
-                                                    self.world_view.create_view()
+                                                    with quasar.QCard(
+                                                        flat=True,
+                                                        bordered=True,
+                                                        v_show=(
+                                                            "show_view_metadata",
+                                                            True,
+                                                        ),
+                                                        classes="absolute column justify-between content-stretch",
+                                                        style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                                                    ):
+                                                        quasar.QTable(
+                                                            style="width: 100%; height: 100%;",
+                                                            dense=True,
+                                                            flat=True,
+                                                            bordered=True,
+                                                            hide_header=True,
+                                                            hide_bottom=True,
+                                                            separator="cell",
+                                                            rows_per_page_options=0,
+                                                            rows=("ui_meta", []),
+                                                            columns=(
+                                                                "ui_cols",
+                                                                [
+                                                                    dict(
+                                                                        name="name",
+                                                                        label="Key",
+                                                                        field="name",
+                                                                        classes="text-weight-medium",
+                                                                    ),
+                                                                    dict(
+                                                                        name="value",
+                                                                        label="Value",
+                                                                        field="value",
+                                                                        classes="ellipsis",
+                                                                        headerStyle="width: 45%",
+                                                                        align="left",
+                                                                    ),
+                                                                ],
+                                                            ),
+                                                            row_key="name",
+                                                        )
 
+                                                # 2D Video View
                                                 with html.Template(
                                                     raw_attrs=["v-slot:after"]
                                                 ):
-                                                    rca.RawImageDisplayArea(
-                                                        name=VIDEO_ADAPTER_NAME,
-                                                        style="object-fit: contain; display: block;",
-                                                        classes="fit",
-                                                    )
-                                        VideoControls(classes="q-px-md")
+                                                    with quasar.QCard(
+                                                        flat=True,
+                                                        bordered=True,
+                                                        classes="absolute column justify-center content-center",
+                                                        style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                                                    ):
+                                                        rca.RawImageDisplayArea(
+                                                            name=VIDEO_ADAPTER_NAME,
+                                                            style="object-fit: contain; display: block;",
+                                                            classes="fit",
+                                                        )
+
+                                        # Right side: 3D View
+                                        with html.Template(raw_attrs=["v-slot:after"]):
+                                            with quasar.QCard(
+                                                flat=True,
+                                                bordered=True,
+                                                classes="absolute column justify-between content-stretch",
+                                                style="top: 0.1rem; left: 0.1rem; bottom: 0.1rem; right: 0.1rem;",
+                                            ):
+                                                self.world_view.create_view()
+
                         # Log Pane
                         with html.Template(raw_attrs=["v-slot:after"]):
                             with quasar.QCard(
@@ -553,4 +565,7 @@ class BurnOutApp:
                                     style="white-space: pre-line;",
                                     v_text=("log_stream", "Empty"),
                                 )
+                        # Video Controls - Full width at natural height
+                        with html.Div(classes="q-pa-sm"):
+                            VideoControls()
             self.ui = layout

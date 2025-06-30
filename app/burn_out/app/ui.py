@@ -33,14 +33,6 @@ class VideoControls(html.Div):
             with html.Div(
                 classes="col-auto row items-center content-center q-gutter-sm"
             ):
-                quasar.QToggle(
-                    classes="col-auto q-m-none",
-                    v_model=(play_loop, True),
-                    checked_icon="repeat",
-                    unchecked_icon="skip_next",
-                    dense=True,
-                    size="xl",
-                )
                 quasar.QInput(
                     classes="col-auto",
                     v_model_number=(current_frame, 1),
@@ -78,12 +70,21 @@ class VideoControls(html.Div):
                     track_size="25px",
                     thumb_size="5px",
                 )
+                quasar.QToggle(
+                    classes="col-auto q-m-none",
+                    v_model=(play_loop, True),
+                    checked_icon="repeat",
+                    unchecked_icon="skip_next",
+                    dense=True,
+                    size="xl",
+                )
                 # enable once the reported fps matches the actual performance
                 # html.Div(
                 #    f"{{{{ {play_speed_label} }}}}",
                 #    classes="text-right",
                 #    style="width: 50px;",
                 # )
+
 
 # TODO fix in kwiver : get version from {kwiver.__version__}
 # TODO see about dialog in QT application what else should we bring ?
@@ -104,6 +105,7 @@ def generate_about_content():
     <br>
     Copyright © Kitware 2024
 """
+
 
 class AboutDialog(html.Div):
     def __init__(
