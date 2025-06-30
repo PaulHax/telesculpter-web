@@ -106,6 +106,7 @@ class BurnOutApp:
         logging.getLogger("trame_server.utils").setLevel(logging.WARNING)
         logging.getLogger("trame_client").setLevel(logging.WARNING)
         logging.getLogger("wslink").setLevel(logging.WARNING)
+        logging.getLogger("aiohttp.access").setLevel(logging.WARNING)
 
         # kwiver data structures
         self.video_adapter = VideoAdapter(
