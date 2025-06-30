@@ -10,11 +10,17 @@ from kwiver.vital.types import (
     geodesy,
 )
 from kwiver.vital.types import metadata_tags as mt
+from kwiver.vital import vital_logging
 import math
 import numpy as np
+import logging
+from .metadata_diagnostics import analyze_metadata_content
+
+logger = vital_logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 
-def make_camera_map(sfm_constraints, metadata):
+def make_camera_map(sfm_constraints, metadata, ignore_metadata=False):
     intrinsics = SimpleCameraIntrinsics()
     base_camera = SimpleCameraPerspective()
     base_camera.set_intrinsics(intrinsics)
@@ -24,11 +30,16 @@ def make_camera_map(sfm_constraints, metadata):
         frame_id: metadata.get_vector(frame_id)[0] for frame_id in metadata.frames()
     }
 
-    # Get local geographic coordinate system
     local_geo_cs = sfm_constraints.local_geo_cs
 
-    # Initialize cameras from metadata
-    camera_map = initialize_cameras_with_metadata(md_map, base_camera, local_geo_cs)
+    if ignore_metadata:
+        logger.info("Ignoring metadata - creating cameras with default poses")
+        camera_map = {}
+        for frame_id in md_map.keys():
+            camera_map[frame_id] = SimpleCameraPerspective(base_camera)
+    else:
+        analyze_metadata_content(md_map)
+        camera_map = initialize_cameras_with_metadata(md_map, base_camera, local_geo_cs)
 
     # Update the SFM constraints with the updated local coordinate system
     sfm_constraints.local_geo_cs = local_geo_cs
@@ -180,28 +191,27 @@ def update_camera_from_metadata(camera, metadata):
         )
     )
 
-    if condition_met:
-        platform_yaw_rad = math.radians(platform_yaw_deg)
-        platform_pitch_rad = math.radians(platform_pitch_deg)
-        platform_roll_rad = math.radians(platform_roll_deg)
+    if not condition_met:
+        return camera
+    platform_yaw_rad = math.radians(platform_yaw_deg)
+    platform_pitch_rad = math.radians(platform_pitch_deg)
+    platform_roll_rad = math.radians(platform_roll_deg)
 
-        sensor_yaw_rad = math.radians(sensor_yaw_deg)
-        sensor_pitch_rad = math.radians(sensor_pitch_deg)
-        sensor_roll_rad = math.radians(sensor_roll_deg)
+    sensor_yaw_rad = math.radians(sensor_yaw_deg)
+    sensor_pitch_rad = math.radians(sensor_pitch_deg)
+    sensor_roll_rad = math.radians(sensor_roll_deg)
 
-        platform_rotation_ned = RotationD(
-            platform_yaw_rad, platform_pitch_rad, platform_roll_rad
-        )
+    platform_rotation_ned = RotationD(
+        platform_yaw_rad, platform_pitch_rad, platform_roll_rad
+    )
 
-        sensor_rotation_ned = RotationD(
-            sensor_yaw_rad, sensor_pitch_rad, sensor_roll_rad
-        )
+    sensor_rotation_ned = RotationD(sensor_yaw_rad, sensor_pitch_rad, sensor_roll_rad)
 
-        combined_rotation_ned = platform_rotation_ned * sensor_rotation_ned
+    combined_rotation_ned = platform_rotation_ned * sensor_rotation_ned
 
-        final_rotation_enu = ned_to_enu(combined_rotation_ned)
+    final_rotation_enu = ned_to_enu(combined_rotation_ned)
 
-        camera.set_rotation(final_rotation_enu)
+    camera.set_rotation(final_rotation_enu)
 
     return camera
 
@@ -211,6 +221,8 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
     Initialize cameras from metadata map
     Port of C++ initialize_cameras_with_metadata function
     """
+
+    logger.debug(f"Initializing {len(metadata_map)} cameras from metadata")
 
     camera_map = {}
 
@@ -224,6 +236,7 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
 
     # Create cameras from metadata
     camera_centers = []
+    cameras_with_orientation = 0
 
     for frame_id, metadata in metadata_map.items():
         # Create camera intrinsics from metadata
@@ -232,6 +245,18 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
         # Create new camera with updated intrinsics
         camera = SimpleCameraPerspective(base_camera)
         camera.set_intrinsics(camera_intrinsics)
+
+        # Check if this frame has complete orientation metadata before updating
+        has_complete_orientation = (
+            metadata.has(mt.tags.VITAL_META_PLATFORM_HEADING_ANGLE)
+            and metadata.has(mt.tags.VITAL_META_PLATFORM_PITCH_ANGLE)
+            and metadata.has(mt.tags.VITAL_META_PLATFORM_ROLL_ANGLE)
+            and metadata.has(mt.tags.VITAL_META_SENSOR_REL_AZ_ANGLE)
+            and metadata.has(mt.tags.VITAL_META_SENSOR_REL_EL_ANGLE)
+        )
+
+        if has_complete_orientation:
+            cameras_with_orientation += 1
 
         # Update camera pose from metadata
         camera = update_camera_from_metadata(camera, metadata)
@@ -247,7 +272,7 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
         # Create LocalCartesian converter with current origin
         origin_geo = local_geo_cs.geo_origin
         converter = LocalCartesian(origin_geo, 0.0)
-        
+
         # Convert to local coordinates and compute mean
         local_centers = []
         for center in camera_centers:
@@ -258,13 +283,17 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
 
         # Compute mean center
         mean_center = np.mean(local_centers, axis=0)
-        
+
         # Convert back to geographic coordinates and update origin
         mean_local = np.array([mean_center[0], mean_center[1], mean_center[2]])
         mean_geo = GeoPoint()
         converter.convert_from_cartesian(mean_local, mean_geo)
-        
+
         local_geo_cs.geo_origin = mean_geo
+
+    logger.info(
+        f"Camera initialization complete: {cameras_with_orientation}/{len(metadata_map)} cameras have orientation metadata"
+    )
 
     return camera_map
 
@@ -273,11 +302,19 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
 class Scene:
     def __init__(self, server):
         self.server = server
+        self.ignore_metadata = False  # TeleSculptor-style configuration option
+
+    def set_ignore_metadata(self, ignore):
+        """Set whether to ignore metadata for camera initialization (like TeleSculptor)"""
+        self.ignore_metadata = ignore
+        logger.info(f"Metadata usage {'disabled' if ignore else 'enabled'}")
 
     def set_metadata(self, metadata):
         self.metadata = metadata
         self.sfm_constraints = SFMConstraints()
         self.sfm_constraints.metadata = metadata
 
-        camera_map = make_camera_map(self.sfm_constraints, metadata)
+        camera_map = make_camera_map(
+            self.sfm_constraints, metadata, self.ignore_metadata
+        )
         self.server.controller.update_camera_map(camera_map)
