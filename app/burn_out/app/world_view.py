@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 NEAR_CLIP = 0.01
 FAR_CLIP = 4.0
-FRUSTUM_SCALE = 0.001
+FRUSTUM_SCALE = 1
 UPDATE_THROTTLE_INTERVAL = 0.1  # 10fps during video playback
 
 
@@ -122,10 +122,17 @@ class ActiveFrustum_Rep(NamedTuple):
     actor: vtkActor
 
 
+class GroundPlan_Rep(NamedTuple):
+    poly_data: vtkPolyData
+    mapper: vtkPolyDataMapper
+    actor: vtkActor
+
+
 class Pipeline(NamedTuple):
     positions_rep: Positions_Rep
     frustums_rep: Frustums_Rep
     active_frustum_rep: ActiveFrustum_Rep
+    ground_plan_rep: GroundPlan_Rep
     renderer: vtkRenderer
     render_window: vtkRenderWindow
 
@@ -209,6 +216,7 @@ def create_frustums_rep(renderer: vtkRenderer):
     actor.SetMapper(mapper)
     actor.GetProperty().SetColor(colors.GetColor3d("Red"))
     actor.GetProperty().SetRepresentationToWireframe()
+    # actor.SetUseBounds(False)
 
     renderer.AddActor(actor)
 
@@ -231,6 +239,7 @@ def create_active_frustum_rep(renderer: vtkRenderer):
     actor.SetMapper(mapper)
     actor.GetProperty().SetColor(colors.GetColor3d("White"))
     actor.GetProperty().SetRepresentationToWireframe()
+    # actor.SetUseBounds(False)
 
     renderer.AddActor(actor)
 
@@ -274,6 +283,224 @@ def update_active_frustum_rep(active_frustum_rep: ActiveFrustum_Rep, frustum_pla
     active_frustum_rep.poly_data.Modified()
 
 
+def create_ground_plan_grid(size: float = 100.0, divisions: int = 20, z_level: float = 0.0):
+    """
+    Creates a grid-based ground plan centered at origin.
+    
+    Args:
+        size: Total size of the grid in world units
+        divisions: Number of grid divisions per side
+        z_level: Z coordinate for the ground plane
+    """
+    points = vtkPoints()
+    lines = vtkCellArray()
+    
+    half_size = size / 2.0
+    step = size / divisions
+    
+    # Create horizontal lines (constant Y, varying X)
+    for i in range(divisions + 1):
+        y = -half_size + i * step
+        
+        # Line from (-half_size, y, z_level) to (half_size, y, z_level)
+        p1_id = points.InsertNextPoint(-half_size, y, z_level)
+        p2_id = points.InsertNextPoint(half_size, y, z_level)
+        
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(p1_id)
+        lines.InsertCellPoint(p2_id)
+    
+    # Create vertical lines (constant X, varying Y)
+    for i in range(divisions + 1):
+        x = -half_size + i * step
+        
+        # Line from (x, -half_size, z_level) to (x, half_size, z_level)
+        p1_id = points.InsertNextPoint(x, -half_size, z_level)
+        p2_id = points.InsertNextPoint(x, half_size, z_level)
+        
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(p1_id)
+        lines.InsertCellPoint(p2_id)
+    
+    poly_data = vtkPolyData()
+    poly_data.SetPoints(points)
+    poly_data.SetLines(lines)
+    
+    return poly_data
+
+
+def create_ground_plan_rep(renderer: vtkRenderer):
+    """
+    Creates a ground plan representation showing a reference grid.
+    """
+    poly_data = create_ground_plan_grid()
+    
+    mapper = vtkPolyDataMapper()
+    mapper.SetInputData(poly_data)
+    
+    actor = vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(colors.GetColor3d("DarkGray"))
+    actor.GetProperty().SetOpacity(0.3)
+    actor.GetProperty().SetLineWidth(1.0)
+    
+    renderer.AddActor(actor)
+    
+    return GroundPlan_Rep(
+        poly_data=poly_data,
+        mapper=mapper,
+        actor=actor,
+    )
+
+
+def create_scaled_camera(original_camera, scale_factor):
+    """
+    Create a scaled version of a camera by scaling its center position.
+    The camera orientation remains the same.
+    """
+    # Scale the camera center
+    original_center = original_camera.center()
+    scaled_center = original_center * scale_factor
+    
+    # Create a new camera with scaled center but same orientation
+    # We'll use the original camera's rotation and intrinsics
+    scaled_camera = type(original_camera)()
+    scaled_camera.set_center(scaled_center)
+    scaled_camera.set_rotation(original_camera.rotation())
+    scaled_camera.set_intrinsics(original_camera.intrinsics())
+    
+    return scaled_camera
+
+
+def calculate_scene_scale_factor(camera_centers: Sequence[Sequence[float]]) -> float:
+    """
+    Calculate appropriate scale factor for visualization, similar to TeleSculptor's approach.
+    
+    TeleSculptor normalizes scenes to reasonable visualization units. For very small
+    coordinate scenes (< 1.0 unit extent), we scale up for better visualization.
+    """
+    if not camera_centers:
+        return 1.0
+        
+    camera_array = np.array(camera_centers)
+    
+    # Calculate scene extent
+    x_extent = np.max(camera_array[:, 0]) - np.min(camera_array[:, 0])
+    y_extent = np.max(camera_array[:, 1]) - np.min(camera_array[:, 1])
+    z_extent = np.max(camera_array[:, 2]) - np.min(camera_array[:, 2])
+    max_extent = max(x_extent, y_extent, z_extent)
+    
+    # If scene is very small (typical for SfM without proper scaling), scale it up
+    # Target: scene should have extent of roughly 10-100 units for good visualization
+    if max_extent < 1.0:
+        # Scale to make largest dimension around 50 units
+        target_size = 50.0
+        scale_factor = target_size / max_extent
+    elif max_extent > 1000.0:
+        # Scale down very large scenes
+        target_size = 100.0
+        scale_factor = target_size / max_extent
+    else:
+        # Scene size is reasonable
+        scale_factor = 1.0
+    
+    return scale_factor
+
+
+def update_ground_plan_position(ground_plan_rep: GroundPlan_Rep, camera_centers: Sequence[Sequence[float]], scale_factor: float):
+    """
+    Updates the ground plan position using TeleSculptor's approach with provided scale factor.
+    
+    Following TeleSculptor's canonical transform estimation:
+    - Uses provided scale factor for consistency with other representations
+    - Positions ground plane below 5th percentile of camera heights
+    - Scales to 1.5x maximum horizontal extent of camera trajectory
+    - Ensures proper orientation relative to camera viewing direction
+    """
+    if not camera_centers:
+        return
+    
+    camera_array = np.array(camera_centers)
+    
+    # Apply scaling to camera positions using provided scale factor
+    scaled_camera_array = camera_array * scale_factor
+    
+    # Calculate robust bounds (following TeleSculptor's getBounds approach)
+    x_min, x_max = np.min(scaled_camera_array[:, 0]), np.max(scaled_camera_array[:, 0])
+    y_min, y_max = np.min(scaled_camera_array[:, 1]), np.max(scaled_camera_array[:, 1])
+    z_values = scaled_camera_array[:, 2]
+    
+    # Use 5th percentile for ground plane height (TeleSculptor's height_percentile = 0.05)
+    ground_z = np.percentile(z_values, 5)
+    
+    # Calculate scene diagonal for scaling (TeleSculptor's groundScale calculation)
+    x_extent = x_max - x_min
+    y_extent = y_max - y_min
+    max_horizontal_extent = max(x_extent, y_extent)
+    
+    # TeleSculptor uses 1.5x scale factor for ground plane relative to scene bounds
+    ground_scale = max(1.5 * max_horizontal_extent, 10.0)  # Minimum size
+    
+    # Calculate grid center (centroid of camera positions in X-Y plane)
+    center_x = np.mean(scaled_camera_array[:, 0])
+    center_y = np.mean(scaled_camera_array[:, 1])
+    
+    # Create grid with TeleSculptor-style positioning
+    # Grid is centered on camera trajectory centroid, scaled appropriately
+    new_poly_data = create_ground_plan_grid_with_center(
+        size=ground_scale,
+        center_x=center_x,
+        center_y=center_y,
+        z_level=ground_z,
+        divisions=20
+    )
+    
+    ground_plan_rep.poly_data.DeepCopy(new_poly_data)
+    ground_plan_rep.poly_data.Modified()
+
+
+def create_ground_plan_grid_with_center(size: float, center_x: float, center_y: float, z_level: float, divisions: int = 20):
+    """
+    Creates a grid-based ground plan centered at specified coordinates.
+    Matches TeleSculptor's ground plane generation approach.
+    """
+    points = vtkPoints()
+    lines = vtkCellArray()
+    
+    half_size = size / 2.0
+    step = size / divisions
+    
+    # Create horizontal lines (constant Y, varying X)
+    for i in range(divisions + 1):
+        y = center_y - half_size + i * step
+        
+        # Line from (center_x - half_size, y, z_level) to (center_x + half_size, y, z_level)
+        p1_id = points.InsertNextPoint(center_x - half_size, y, z_level)
+        p2_id = points.InsertNextPoint(center_x + half_size, y, z_level)
+        
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(p1_id)
+        lines.InsertCellPoint(p2_id)
+    
+    # Create vertical lines (constant X, varying Y)
+    for i in range(divisions + 1):
+        x = center_x - half_size + i * step
+        
+        # Line from (x, center_y - half_size, z_level) to (x, center_y + half_size, z_level)
+        p1_id = points.InsertNextPoint(x, center_y - half_size, z_level)
+        p2_id = points.InsertNextPoint(x, center_y + half_size, z_level)
+        
+        lines.InsertNextCell(2)
+        lines.InsertCellPoint(p1_id)
+        lines.InsertCellPoint(p2_id)
+    
+    poly_data = vtkPolyData()
+    poly_data.SetPoints(points)
+    poly_data.SetLines(lines)
+    
+    return poly_data
+
+
 def create_pipeline():
     renderer = vtkRenderer()
     renderer.ResetCamera()
@@ -286,6 +513,7 @@ def create_pipeline():
         positions_rep=create_camera_position_rep(renderer),
         frustums_rep=create_frustums_rep(renderer),
         active_frustum_rep=create_active_frustum_rep(renderer),
+        ground_plan_rep=create_ground_plan_rep(renderer),
         renderer=renderer,
         render_window=render_window,
     )
@@ -301,6 +529,7 @@ class WorldView:
         self.camera_map = {}
         self._camera_reset_done = False  # Track if camera has been reset already
         self._throttled_update = create_throttler(UPDATE_THROTTLE_INTERVAL)
+        self._scene_scale_factor = 1.0  # Shared scale factor for all representations
 
     def create_view(self):
         self.html_view = vtk_widgets.VtkLocalView(
@@ -329,11 +558,14 @@ class WorldView:
         active_camera = camera_map.get(active_camera_id)
 
         if active_camera:
+            # Generate frustum from scaled camera for proper positioning
+            scaled_active_camera = create_scaled_camera(active_camera, self._scene_scale_factor)
+            
             active_frustum_planes = get_frustum_planes_from_simple_camera(
-                active_camera,
+                scaled_active_camera,
                 NEAR_CLIP,
-                FAR_CLIP,
-                FRUSTUM_SCALE * 2.0,
+                FAR_CLIP * 2,
+                FRUSTUM_SCALE,  
             )
             update_active_frustum_rep(
                 self.pipeline.active_frustum_rep, active_frustum_planes
@@ -350,18 +582,30 @@ class WorldView:
     def _update_cameras(self):
         camera_map = getattr(self, "camera_map", {})
         centers = [camera.center().tolist() for camera in camera_map.values()]
-        update_positions_rep(self.pipeline.positions_rep, centers)
+        
+        # Calculate shared scene scale factor once for all representations
+        self._scene_scale_factor = calculate_scene_scale_factor(centers) if centers else 1.0
+        
+        # Apply scaling to camera positions for visualization
+        scaled_centers = (np.array(centers) * self._scene_scale_factor).tolist() if centers else []
+        update_positions_rep(self.pipeline.positions_rep, scaled_centers)
+        
+        # Generate frustums from scaled cameras for proper positioning
         frustums = (
             get_frustum_planes_from_simple_camera(
-                cam,
+                create_scaled_camera(cam, self._scene_scale_factor),
                 NEAR_CLIP,
                 FAR_CLIP,
-                FRUSTUM_SCALE,
+                FRUSTUM_SCALE,  # Use original frustum scale since camera is already scaled
             )
             for cam in camera_map.values()
         )
 
         update_frustums_rep(self.pipeline.frustums_rep, frustums, 10)
+        
+        # Update ground plan position using TeleSculptor's approach with shared scale factor
+        if centers:
+            update_ground_plan_position(self.pipeline.ground_plan_rep, centers, self._scene_scale_factor)
 
         # Only reset camera the first time with a valid camera_map
         if camera_map and not self._camera_reset_done:
