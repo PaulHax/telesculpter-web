@@ -2,6 +2,8 @@ import multiprocessing
 import os
 import sys
 
+from burn_out.app.main import main
+
 
 def _setup_kwiver_env_for_bundle():
     if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
@@ -34,7 +36,6 @@ if sys.platform == "win32":  # Only apply this on Windows
     if sys.stderr is None:
         sys.stderr = open(os.devnull, "w")
 
-from burn_out.app.main import main
 
 if __name__ == "__main__":
     multiprocessing.freeze_support()
