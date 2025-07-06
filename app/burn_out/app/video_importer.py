@@ -7,8 +7,15 @@ from kwiver.vital import vital_logging
 import logging
 import sys
 import asyncio
-from multiprocessing import Process, Queue
+from multiprocessing import Queue
 from burn_out.app.metadata_serializer import serialize, deserialize
+from burn_out.multiprocess_worker import (
+    create_worker,
+    send_task,
+    await_result,
+    close_worker,
+    cancel_worker,
+)
 
 logger = vital_logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
@@ -20,77 +27,84 @@ stream_handler.setFormatter(formatter)
 logger.addHandler(stream_handler)
 
 
+def video_worker(task_queue: Queue, result_queue: Queue):
+    """Worker function for video metadata processing."""
+    original_metadata = None  # Keep original metadata for writing
+    vpm = plugin_management.plugin_manager_instance()
+    vpm.load_all_plugins()
+
+    while True:
+        try:
+            task = task_queue.get()
+            if task is None:
+                break
+
+            if isinstance(task, tuple) and len(task) == 2:
+                func_name, args = task
+
+                if func_name == "extract_metadata":
+                    original_metadata = _extract_metadata(*args)
+                    json_metadata = serialize(original_metadata)
+                    result_queue.put(json_metadata)
+                elif func_name == "write_metadata":
+                    if original_metadata is not None:
+                        _write_metadata(original_metadata, *args)
+                        result_queue.put("write_complete")
+                    else:
+                        logger.warning("No metadata to write")
+                        result_queue.put("write_error")
+        except (KeyboardInterrupt, SystemExit):
+            break
+        except Exception as e:
+            logger.error(f"Worker error: {e}")
+            result_queue.put(f"error: {e}")
+
+
 class VideoImporter:
-    """Helper class to extract and save metadata in a different process"""
+    """Helper class to extract and save metadata using functional multiprocess worker."""
 
     def __init__(self, metadata_callback):
-        self.task_handle = None
-        self.task_queue = Queue()
-        self.result_queue = Queue()  # Add result queue
-        self.process = self._spawn_new_process()
         self.metadata_callback = metadata_callback
-
-    def _spawn_new_process(self):
-        process = Process(target=_worker, args=(self.task_queue, self.result_queue))
-        process.start()
-        return process
+        self.worker = create_worker(video_worker)
 
     def run(self, video_path, config_path):
         """Extract metadata from the video given in video_path using a reader
         constructed based on config_path"""
-        self.task_queue.put((_extract_metadata, (video_path, config_path)))
+        self.worker = send_task(
+            self.worker, ("extract_metadata", (video_path, config_path))
+        )
 
         # Start a task to await results and call metadata callback
         asyncio.create_task(self._await_metadata_results())
 
     def write(self, path, config_path):
         """Write previously extracted data to path"""
-        self.task_queue.put((_write, (path, config_path)))
+        self.worker = send_task(self.worker, ("write_metadata", (path, config_path)))
 
     def cancel(self):
-        """Terminate the process
-        Note: this aborts any running tasks"""
-        self.process.terminate()
-        self.task_queue = Queue()
-        self.process = self._spawn_new_process()
+        """Cancel current operations and restart worker"""
+        self.worker = cancel_worker(self.worker)
 
     def close(self):
-        """Close the process loop.
-        Note: The process will terminate once all of its current tasks are
-        completed"""
-        self.task_queue.put(None)
+        """Close the worker process"""
+        close_worker(self.worker)
 
     async def _await_metadata_results(self):
         """Await metadata results from the worker process and call the metadata callback"""
-        loop = asyncio.get_event_loop()
+        self.worker, result = await await_result(self.worker)
 
-        # Run the blocking queue.get operation in a thread pool
-        metadata = await loop.run_in_executor(None, self.result_queue.get)
-        deserialized_metadata = deserialize(metadata)
-        if deserialized_metadata is not None and self.metadata_callback:
-            if asyncio.iscoroutinefunction(self.metadata_callback):
-                await self.metadata_callback(deserialized_metadata)
-            else:
-                self.metadata_callback(deserialized_metadata)
-
-
-def _worker(queue, result_queue):
-    original_metadata = None  # Keep original metadata for writing
-    vpm = plugin_management.plugin_manager_instance()
-    vpm.load_all_plugins()
-
-    for func, args in iter(queue.get, None):
-        if func == _extract_metadata:
-            original_metadata = func(*args)
-            json_metadata = serialize(original_metadata)
-            result_queue.put(json_metadata)
-        elif func == _write:
-            if original_metadata is not None:
-                func(original_metadata, *args)
-            else:
-                logger.warning("No metadata to write")
-        else:
-            raise RuntimeError("Unhandled worker function")
+        if (
+            result
+            and result != "write_complete"
+            and result != "write_error"
+            and not result.startswith("error:")
+        ):
+            deserialized_metadata = deserialize(result)
+            if deserialized_metadata is not None and self.metadata_callback:
+                if asyncio.iscoroutinefunction(self.metadata_callback):
+                    await self.metadata_callback(deserialized_metadata)
+                else:
+                    self.metadata_callback(deserialized_metadata)
 
 
 def _extract_metadata(video_path, config_path):
@@ -125,7 +139,7 @@ def _extract_metadata(video_path, config_path):
     return frame_metadata
 
 
-def _write(data, metadata_path, config_path):
+def _write_metadata(data, metadata_path, config_path):
     logger.debug("writing metadata")
     writer_type = "json"
     if Path(metadata_path).suffix == ".csv":

@@ -92,7 +92,7 @@ class VideoControls(html.Div):
 # - version of python packages (pip list)
 # - license ?
 def generate_about_content():
-    return f"""
+    return """
     <h3> BurnOut </h3> <br>
     Version 0.17.0 <br>
     Using KWIVER 2.0.0 <br>
