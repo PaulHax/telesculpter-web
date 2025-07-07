@@ -1,9 +1,35 @@
-# Desktop
+# Desktop Bundle Building
 
-This relies on [pyinstaller](https://pyinstaller.org/en/stable/) and tauri (https://tauri.app/) to bundle your trame application into a standalone desktop application.
-The files under `src-tauri` were created using as a template [this](https://github.com/Kitware/trame-tauri/tree/c27d437d4d1f1840ecf4373ce5fe726f1e7dd707/examples/01_tauri_ws/src-tauri) example.
+This directory contains automated scripts for building BurnOut desktop bundles using PyInstaller and Tauri. The system uses prebuilt KWIVER wheels from GitLab, eliminating the need to compile KWIVER from source.
 
-## Building the bundle
+## Quick Start
+
+### Option 1: Automated Build (Recommended)
+
+**Linux:**
+
+```bash
+# Install prerequisites (run once)
+./install-prerequisites-linux.sh
+
+# Build the bundle
+./build-linux-bundle.sh
+```
+
+**Windows:**
+
+```powershell
+# Install prerequisites (run once, as Administrator)
+.\install-prerequisites-windows.ps1
+
+# Build the bundle
+.\build-windows-bundle.ps1
+```
+
+### Option 2: Manual Setup (Legacy)
+
+<details>
+<summary>Click to expand manual setup instructions</summary>
 
 1. Create a new virtual environment and install the burnout application
 
@@ -93,3 +119,5 @@ on windows
 ```
 
 This creates installers that can be uploaded to a gitlab release. On windows, both .exe and .msi installers are created.
+
+</details>

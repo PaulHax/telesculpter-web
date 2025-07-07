@@ -1,0 +1,186 @@
+name: Build Tauri Bundles
+
+on:
+  push:
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create a GitHub release'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-22.04
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python 3.8
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+        
+    - name: Install prerequisites
+      run: |
+        cd app/bundles/desktop
+        chmod +x install-prerequisites-linux.sh
+        ./install-prerequisites-linux.sh
+      
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          app/bundles/desktop/src-tauri/target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+          
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cache/pip
+          app/bundles/desktop/cache
+        key: ${{ runner.os }}-python-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-python-
+          
+    - name: Build Linux bundle
+      run: |
+        cd app/bundles/desktop
+        chmod +x build-linux-bundle.sh
+        ./build-linux-bundle.sh
+        
+    - name: List created files
+      run: |
+        cd app/bundles/desktop
+        ls -la *.AppImage || echo "No AppImage found"
+        
+    - name: Upload Linux AppImage
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/upload-artifact@v3
+      with:
+        name: linux-appimage
+        path: app/bundles/desktop/*.AppImage
+
+  build-windows:
+    runs-on: windows-2022
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Setup Python 3.8
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.8'
+        
+    - name: Install prerequisites  
+      run: |
+        cd app\bundles\desktop
+        powershell -ExecutionPolicy Bypass -File .\install-prerequisites-windows.ps1 -SkipVSTools
+      
+    - name: Cache cargo dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.cargo/registry
+          ~/.cargo/git
+          app/bundles/desktop/src-tauri/target
+        key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-cargo-
+          
+    - name: Cache Python dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~\AppData\Local\pip\Cache
+          app\bundles\desktop\cache
+        key: ${{ runner.os }}-python-${{ hashFiles('**/requirements*.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-python-
+          
+    - name: Build Windows bundle
+      run: |
+        cd app\bundles\desktop
+        powershell -ExecutionPolicy Bypass -File .\build-windows-bundle.ps1
+        
+    - name: List created files
+      run: |
+        cd app\bundles\desktop
+        dir *.exe, *.msi
+        
+    - name: Upload Windows installers
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: actions/upload-artifact@v3
+      with:
+        name: windows-installers
+        path: |
+          app/bundles/desktop/*.exe
+          app/bundles/desktop/*.msi
+
+  create-release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      
+    - name: Download Linux AppImage
+      uses: actions/download-artifact@v3
+      with:
+        name: linux-appimage
+        path: ./artifacts/linux/
+        
+    - name: Download Windows installers
+      uses: actions/download-artifact@v3
+      with:
+        name: windows-installers
+        path: ./artifacts/windows/
+        
+    - name: List all artifacts
+      run: |
+        echo "Linux artifacts:"
+        ls -la ./artifacts/linux/
+        echo "Windows artifacts:"
+        ls -la ./artifacts/windows/
+        
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/v')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          ./artifacts/linux/*.AppImage
+          ./artifacts/windows/*.exe
+          ./artifacts/windows/*.msi
+        generate_release_notes: true
+        prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Create Manual Release
+      if: github.event.inputs.create_release == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: manual-${{ github.run_number }}
+        name: Manual Release ${{ github.run_number }}
+        files: |
+          ./artifacts/linux/*.AppImage
+          ./artifacts/windows/*.exe
+          ./artifacts/windows/*.msi
+        generate_release_notes: true
+        prerelease: true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

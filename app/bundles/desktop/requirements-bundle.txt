@@ -1,0 +1,13 @@
+# BurnOut Bundle Requirements
+# Pinned dependencies for consistent bundle builds
+
+# Core bundling tool
+pyinstaller>=5.0.0,<6.0.0
+
+# Python packaging and installation
+pip>=21.0.0
+setuptools>=60.0.0
+wheel>=0.37.0
+
+# Network requests for wheel downloads
+requests>=2.25.0,<3.0.0
