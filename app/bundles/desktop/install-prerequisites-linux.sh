@@ -25,7 +25,15 @@ if command -v apt-get &> /dev/null; then
         liblapack-dev \
         patchelf \
         curl \
-        wget
+        wget \
+        libwebkit2gtk-4.0-dev \
+        libsoup2.4-dev \
+        libjavascriptcoregtk-4.0-dev \
+        file \
+        fuse \
+        libfuse2 \
+        gfortran \
+        libgfortran5
 elif command -v yum &> /dev/null; then
     sudo yum groupinstall -y "Development Tools"
     sudo yum install -y \
@@ -37,7 +45,14 @@ elif command -v yum &> /dev/null; then
         lapack-devel \
         patchelf \
         curl \
-        wget
+        wget \
+        webkit2gtk3-devel \
+        libsoup-devel \
+        file \
+        fuse \
+        fuse-libs \
+        gcc-gfortran \
+        libgfortran
 elif command -v pacman &> /dev/null; then
     sudo pacman -S --needed \
         base-devel \
@@ -49,7 +64,12 @@ elif command -v pacman &> /dev/null; then
         lapack \
         patchelf \
         curl \
-        wget
+        wget \
+        webkit2gtk \
+        libsoup \
+        file \
+        fuse2 \
+        gcc-fortran
 else
     echo "Error: Unsupported package manager. Please install dependencies manually."
     exit 1

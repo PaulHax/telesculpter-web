@@ -49,14 +49,16 @@ rm -rf "$VENV_DIR"
 python3 -m venv "$VENV_DIR"
 source "$VENV_DIR/bin/activate"
 
+# Install in proper order: KWIVER wheel first (brings numpy), then our app, then pyinstaller.  Seems to fix lib gfortran fortran.so pyinstall bundling issues.  Seems to fix lib fortran.so pyinstall bundling issues.
 pip install --upgrade pip
-pip install -e "$PROJECT_ROOT/app"
 pip install "$WHEEL_PATH"
+pip install "$PROJECT_ROOT/app"
 pip install pyinstaller
 
 # Clean previous builds
 cd "$SCRIPT_DIR"
 rm -rf build server.spec ./src-tauri/target ./src-tauri/server ./*.AppImage
+rm -rf "$PROJECT_ROOT/app"/*.egg-info "$PROJECT_ROOT/app/build"
 
 # Build PyInstaller bundle
 echo "Building PyInstaller bundle..."
@@ -73,10 +75,22 @@ python -m PyInstaller \
     --additional-hooks-dir="$SCRIPT_DIR" \
     "$SCRIPT_DIR/burn-out.py"
 
-# Fix numpy library rpaths
-echo "Fixing numpy library rpaths..."
-find ./src-tauri/server/_internal/numpy.libs/ -name "libopenblasp*" -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
-find ./src-tauri/server/_internal/numpy.libs/ -name "libgfortran*" -exec patchelf --set-rpath '$ORIGIN' {} \; 2>/dev/null || true
+# Fix rpath in libraries (exactly like legacy script that worked)
+echo "Fixing library rpaths..."
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/numpy.libs/libopenblasp* 2>/dev/null || true
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/numpy.libs/libopenblas64* 2>/dev/null || true
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/numpy.libs/libgfortran* 2>/dev/null || true
+# Fix OpenGL libraries that are causing the AppImage bundling to fail
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/kwiver.libs/libGLX* 2>/dev/null || true
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/kwiver.libs/libOpenGL* 2>/dev/null || true
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/kwiver.libs/libGLdispatch* 2>/dev/null || true
+# Fix X11 libraries that are causing the AppImage bundling to fail
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/libXcursor* 2>/dev/null || true
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/libXfixes* 2>/dev/null || true
+# Fix webp image processing libraries
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/libwebp* 2>/dev/null || true
+patchelf --set-rpath '$ORIGIN' ./src-tauri/server/_internal/libsharpyuv* 2>/dev/null || true
+# KWIVER plugin rpath fixes removed - collect_dynamic_libs() now handles everything without duplicates
 
 # Generate web content and build Tauri bundle
 echo "Generating web content..."
