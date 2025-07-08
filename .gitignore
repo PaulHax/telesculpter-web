@@ -34,5 +34,6 @@ app/bundles/desktop/Burnout_0.1.0_x64_en-US.msi
 app/bundles/desktop/Burnout_0.1.0_x64-setup.exe
 app/bundles/desktop/.build-venv
 app/bundles/desktop/cache
+app/build
 
 CLAUDE.md
