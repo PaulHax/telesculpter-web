@@ -145,3 +145,9 @@ deactivate
 if (-not $KeepVenv) {
     Remove-Item -Recurse -Force $VenvDir
 }
+
+# Clean up app build artifacts
+$AppBuildDir = "$ProjectRoot/app/build"
+if (Test-Path $AppBuildDir) {
+    Remove-Item -Recurse -Force $AppBuildDir
+}
