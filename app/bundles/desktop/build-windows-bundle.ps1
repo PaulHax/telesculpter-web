@@ -23,6 +23,13 @@ if (-not (Get-Command python -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
+# Check Python version (KWIVER wheel requires Python 3.8)
+$PythonVersion = python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"
+if ($PythonVersion -ne "3.8") {
+    Write-Host "Warning: KWIVER wheel is built for Python 3.8, but you have Python $PythonVersion"
+    Write-Host "This may cause installation issues."
+}
+
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     Write-Host "Error: Rust/Cargo is not installed. Run install-prerequisites-windows.ps1 first."
     exit 1
@@ -134,6 +141,7 @@ foreach ($Installer in $Installers) {
 }
 
 # Cleanup
+deactivate
 if (-not $KeepVenv) {
     Remove-Item -Recurse -Force $VenvDir
 }
