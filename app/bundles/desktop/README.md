@@ -20,9 +20,12 @@ This directory contains automated scripts for building BurnOut desktop bundles u
 
 ```powershell
 # Install prerequisites (run once, as Administrator)
+# Note: If you have Visual Studio Build Tools installed, run from
+# "Developer Command Prompt" or "Developer PowerShell" for proper detection
 .\install-prerequisites-windows.ps1
 
 # Build the bundle
+# Note: Run from "Developer Command Prompt" if you have VS Build Tools installed
 .\build-windows-bundle.ps1
 ```
 
