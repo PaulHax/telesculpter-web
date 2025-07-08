@@ -58,11 +58,11 @@ if (Test-Path $VenvDir) {
 }
 
 python -m venv $VenvDir
-& "$VenvDir/Scripts/Activate.ps1"
+. "$VenvDir/Scripts/Activate.ps1"
 
 python -m pip install --upgrade pip
-pip install -e "$ProjectRoot/app"
 pip install $WheelPath
+pip install "$ProjectRoot/app"
 pip install pyinstaller
 
 # Compile sidecar if possible
@@ -91,7 +91,6 @@ Get-ChildItem -Filter "*.msi" | Remove-Item -Force
 
 # Build PyInstaller bundle
 Write-Host "Building PyInstaller bundle..."
-& "$VenvDir/Scripts/Activate.ps1"
 $env:KWIVER_PLUGIN_PATH = "$VenvDir/Lib/site-packages/kwiver/lib/kwiver/plugins"
 
 python -m PyInstaller `
@@ -129,7 +128,7 @@ if (Test-Path $MsiPath) {
 Pop-Location
 
 Write-Host "Build completed successfully!"
-$Installers = Get-ChildItem -Path $ScriptDir -Filter "*.exe", "*.msi"
+$Installers = Get-ChildItem -Path $ScriptDir -Include "*.exe", "*.msi" -File
 foreach ($Installer in $Installers) {
     Write-Host "Created: $($Installer.Name)"
 }
