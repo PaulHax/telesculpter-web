@@ -2,6 +2,7 @@ name: Build Tauri Bundles
 
 on:
   push:
+    branches: [ master, main ]
     tags:
       - 'v*'
   pull_request:
@@ -66,11 +67,11 @@ jobs:
         ls -la *.AppImage || echo "No AppImage found"
         
     - name: Upload Linux AppImage
-      if: startsWith(github.ref, 'refs/tags/')
       uses: actions/upload-artifact@v4
       with:
         name: linux-appimage
         path: app/bundles/desktop/*.AppImage
+        retention-days: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true') && 90 || 7 }}
 
   build-windows:
     runs-on: windows-2022
@@ -83,11 +84,14 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.8'
-        
+
+    - name: Install Visual Studio Build Tools
+      uses: microsoft/setup-msbuild@v2
+      
     - name: Install prerequisites  
       run: |
         cd app\bundles\desktop
-        powershell -ExecutionPolicy Bypass -File .\install-prerequisites-windows.ps1 -SkipVSTools
+        powershell -ExecutionPolicy Bypass -File .\install-prerequisites-windows.ps1
       
     - name: Cache cargo dependencies
       uses: actions/cache@v3
@@ -121,13 +125,68 @@ jobs:
         dir *.exe, *.msi
         
     - name: Upload Windows installers
-      if: startsWith(github.ref, 'refs/tags/')
       uses: actions/upload-artifact@v4
       with:
         name: windows-installers
         path: |
           app/bundles/desktop/*.exe
           app/bundles/desktop/*.msi
+        retention-days: ${{ (github.ref == 'refs/heads/master' || startsWith(github.ref, 'refs/tags/') || github.event.inputs.create_release == 'true') && 90 || 7 }}
+
+  semantic-release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+      
+    - name: Download Linux AppImage
+      uses: actions/download-artifact@v4
+      with:
+        name: linux-appimage
+        path: ./artifacts/linux/
+        
+    - name: Download Windows installers
+      uses: actions/download-artifact@v4
+      with:
+        name: windows-installers
+        path: ./artifacts/windows/
+        
+    - name: List all artifacts
+      run: |
+        echo "Linux artifacts:"
+        ls -la ./artifacts/linux/
+        echo "Windows artifacts:"
+        ls -la ./artifacts/windows/
+        
+    - name: Create semantic-release config
+      run: |
+        cat > .releaserc.json << 'EOF'
+        {
+          "branches": ["master", "main"],
+          "plugins": [
+            "@semantic-release/commit-analyzer",
+            "@semantic-release/release-notes-generator",
+            ["@semantic-release/github", {
+              "assets": [
+                {"path": "artifacts/linux/*.AppImage", "label": "Linux AppImage"},
+                {"path": "artifacts/windows/*.exe", "label": "Windows Installer"},
+                {"path": "artifacts/windows/*.msi", "label": "Windows MSI"}
+              ]
+            }]
+          ]
+        }
+        EOF
+        
+    - name: Semantic Release
+      uses: cycjimmy/semantic-release-action@v4
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   create-release:
     needs: [build-linux, build-windows]
