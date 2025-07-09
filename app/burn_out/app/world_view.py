@@ -32,9 +32,52 @@ colors = vtkNamedColors()
 logger = logging.getLogger(__name__)
 
 NEAR_CLIP = 0.01
-FAR_CLIP = 4.0
+# TeleSculptor uses different far clip for active vs inactive cameras
+FAR_CLIP_INACTIVE = 4.0  # TeleSculptor's NonActiveCameraRepLength default
+FAR_CLIP_ACTIVE = 15.0  # TeleSculptor's ActiveCameraRepLength default
 FRUSTUM_SCALE = 1
 UPDATE_THROTTLE_INTERVAL = 0.1  # 10fps during video playback
+
+# TeleSculptor default UI scale values
+CAMERA_UI_SCALE = 0.25  # Default scale for active camera
+INACTIVE_SCALE_FACTOR = 0.1  # Inactive cameras are 0.1x active scale
+
+
+def calculate_frustum_far_clip(camera_centers: Sequence[Sequence[float]], 
+                               is_active: bool = False) -> float:
+    """
+    Calculate frustum far clip distance based on scene bounds.
+    Follows TeleSculptor's approach: 0.9 * bbox diagonal * UI scale factors.
+    
+    Args:
+        camera_centers: List of camera center coordinates
+        is_active: Whether this is for the active camera (larger frustum)
+    
+    Returns:
+        Far clip distance for frustum
+    """
+    if not camera_centers:
+        return FAR_CLIP_ACTIVE if is_active else FAR_CLIP_INACTIVE
+    
+    # Compute bounding box diagonal like TeleSculptor's updateScale
+    camera_array = np.array(camera_centers)
+    bbox_min = np.min(camera_array, axis=0)
+    bbox_max = np.max(camera_array, axis=0)
+    bbox_diagonal = np.linalg.norm(bbox_max - bbox_min)
+    
+    # TeleSculptor uses 0.9 * diagonal for base scale
+    base_camera_scale = 0.9 * bbox_diagonal
+    
+    # Calculate far clip based on active/inactive status
+    if is_active:
+        frustum_far_clip = base_camera_scale * CAMERA_UI_SCALE
+        min_clip = FAR_CLIP_ACTIVE
+    else:
+        frustum_far_clip = base_camera_scale * CAMERA_UI_SCALE * INACTIVE_SCALE_FACTOR
+        min_clip = FAR_CLIP_INACTIVE
+    
+    # Ensure minimum far clip distance
+    return max(frustum_far_clip, min_clip)
 
 
 def build_camera_frustum(
@@ -356,25 +399,6 @@ def create_ground_plan_rep(renderer: vtkRenderer):
     )
 
 
-def create_scaled_camera(original_camera, scale_factor):
-    """
-    Create a scaled version of a camera by scaling its center position.
-    The camera orientation remains the same.
-    """
-    # Scale the camera center
-    original_center = original_camera.center()
-    scaled_center = original_center * scale_factor
-
-    # Create a new camera with scaled center but same orientation
-    # We'll use the original camera's rotation and intrinsics
-    scaled_camera = type(original_camera)()
-    scaled_camera.set_center(scaled_center)
-    scaled_camera.set_rotation(original_camera.rotation())
-    scaled_camera.set_intrinsics(original_camera.intrinsics())
-
-    return scaled_camera
-
-
 def calculate_scene_scale_factor(camera_centers: Sequence[Sequence[float]]) -> float:
     """
     Calculate appropriate scale factor for visualization, similar to TeleSculptor's approach.
@@ -571,15 +595,14 @@ class WorldView:
         active_camera = camera_map.get(active_camera_id)
 
         if active_camera:
-            # Generate frustum from scaled camera for proper positioning
-            scaled_active_camera = create_scaled_camera(
-                active_camera, self._scene_scale_factor
-            )
+            # Calculate active camera frustum with dynamic scaling
+            camera_centers = [cam.center().tolist() for cam in self.camera_map.values()]
+            active_frustum_far_clip = calculate_frustum_far_clip(camera_centers, is_active=True)
 
             active_frustum_planes = get_frustum_planes_from_simple_camera(
-                scaled_active_camera,
+                active_camera,  # Use original camera, not scaled
                 NEAR_CLIP,
-                FAR_CLIP * 2,
+                active_frustum_far_clip,
                 FRUSTUM_SCALE,
             )
             update_active_frustum_rep(
@@ -603,19 +626,21 @@ class WorldView:
             calculate_scene_scale_factor(centers) if centers else 1.0
         )
 
-        # Apply scaling to camera positions for visualization
-        scaled_centers = (
-            (np.array(centers) * self._scene_scale_factor).tolist() if centers else []
-        )
-        update_positions_rep(self.pipeline.positions_rep, scaled_centers)
+        # Use original camera positions (not scaled) for visualization
+        # TeleSculptor doesn't scale camera positions, only frustum sizes
+        update_positions_rep(self.pipeline.positions_rep, centers)
 
-        # Generate frustums from scaled cameras for proper positioning
+        # Calculate dynamic frustum scale based on scene bounds
+        frustum_far_clip = calculate_frustum_far_clip(centers, is_active=False)
+
+        # Generate frustums from original cameras (not scaled positions)
+        # Only the frustum size is adjusted based on scene scale
         frustums = (
             get_frustum_planes_from_simple_camera(
-                create_scaled_camera(cam, self._scene_scale_factor),
+                cam,
                 NEAR_CLIP,
-                FAR_CLIP,
-                FRUSTUM_SCALE,  # Use original frustum scale since camera is already scaled
+                frustum_far_clip,
+                FRUSTUM_SCALE,
             )
             for cam in camera_map.values()
         )
