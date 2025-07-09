@@ -274,7 +274,13 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
     for frame_id, metadata in metadata_map.items():
         if metadata.has(mt.tags.VITAL_META_SENSOR_LOCATION) and not origin_set:
             sensor_loc = metadata.find(mt.tags.VITAL_META_SENSOR_LOCATION).data
-            local_geo_cs.geo_origin = sensor_loc
+            # Set origin to ground level (altitude = 0) like TeleSculptor
+            # This ensures cameras appear above the ground plane
+            ground_origin = GeoPoint(sensor_loc.location(), sensor_loc.crs())
+            loc = ground_origin.location()
+            loc[2] = 0.0  # Set altitude to 0
+            ground_origin.set_location(loc, ground_origin.crs())
+            local_geo_cs.geo_origin = ground_origin
             origin_set = True
             break
 
@@ -327,6 +333,9 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
 
         # Compute mean center
         mean_center = np.mean(local_centers, axis=0)
+
+        # Only use mean easting and northing, keep altitude at 0 (like TeleSculptor)
+        mean_center[2] = 0.0
 
         # Convert back to geographic coordinates and update origin
         mean_local = np.array([mean_center[0], mean_center[1], mean_center[2]])
