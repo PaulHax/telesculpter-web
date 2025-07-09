@@ -406,11 +406,11 @@ def update_ground_plan_position(
     """
     Updates the ground plan position using TeleSculptor's approach.
 
-    Following TeleSculptor's canonical transform estimation:
+    Following TeleSculptor's ground plane behavior:
     - Uses unscaled camera positions (matching TeleSculptor)
-    - Positions ground plane below 5th percentile of camera heights
+    - Always positions ground plane at Z=0 (fixed reference plane)
     - Scales to 1.5x maximum horizontal extent of camera trajectory
-    - Ensures proper orientation relative to camera viewing direction
+    - Centers grid on camera trajectory centroid in X-Y plane
     """
     if not camera_centers:
         return
@@ -421,10 +421,9 @@ def update_ground_plan_position(
     # Calculate robust bounds (following TeleSculptor's getBounds approach)
     x_min, x_max = np.min(camera_array[:, 0]), np.max(camera_array[:, 0])
     y_min, y_max = np.min(camera_array[:, 1]), np.max(camera_array[:, 1])
-    z_values = camera_array[:, 2]
 
-    # Use 5th percentile for ground plane height (TeleSculptor's height_percentile = 0.05)
-    ground_z = np.percentile(z_values, 5)
+    # TeleSculptor always positions ground plane at Z=0
+    ground_z = 0.0
 
     # Calculate scene diagonal for scaling (TeleSculptor's groundScale calculation)
     x_extent = x_max - x_min
