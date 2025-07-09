@@ -1,6 +1,5 @@
 param(
-    [switch]$KeepVenv = $false,
-    [switch]$SkipSidecar = $false
+    [switch]$KeepVenv = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -72,19 +71,21 @@ pip install $WheelPath
 pip install "$ProjectRoot/app"
 pip install pyinstaller
 
-# Compile sidecar if possible
-if (-not $SkipSidecar) {
-    Write-Host "Compiling sidecar executable..."
-    Push-Location "$ScriptDir/src-tauri/sidecar"
-    try {
-        & "./compile_sidecar.bat"
+# Compile sidecar (required)
+Write-Host "Compiling sidecar executable..."
+Push-Location "$ScriptDir/src-tauri/sidecar"
+try {
+    & "./compile_sidecar.bat"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Sidecar compilation failed with exit code $LASTEXITCODE"
     }
-    catch {
-        Write-Host "Warning: Failed to compile sidecar"
-    }
-    finally {
-        Pop-Location
-    }
+}
+catch {
+    Write-Host "Error: Failed to compile sidecar - $_"
+    throw
+}
+finally {
+    Pop-Location
 }
 
 # Clean previous builds
@@ -118,7 +119,14 @@ python -m trame.tools.www --output ./src-tauri/www
 
 Write-Host "Building Tauri installers..."
 cargo tauri icon
+if ($LASTEXITCODE -ne 0) {
+    throw "cargo tauri icon failed with exit code $LASTEXITCODE"
+}
+
 cargo tauri build
+if ($LASTEXITCODE -ne 0) {
+    throw "cargo tauri build failed with exit code $LASTEXITCODE"
+}
 
 # Move installers to current directory
 $NsisPath = "./src-tauri/target/release/bundle/nsis"
