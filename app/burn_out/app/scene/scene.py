@@ -21,7 +21,13 @@ logger.setLevel(logging.DEBUG)
 
 
 def make_camera_map(sfm_constraints, metadata, ignore_metadata=False):
+    # Initialize base camera with TeleSculptor defaults from gui_default_camera_intrinsics.conf
     intrinsics = SimpleCameraIntrinsics()
+    intrinsics.set_focal_length(12500.0)  # TeleSculptor default
+    intrinsics.set_principal_point([360.0, 240.0])  # TeleSculptor default
+    intrinsics.set_aspect_ratio(1.0)  # TeleSculptor default
+    intrinsics.set_skew(0.0)  # TeleSculptor default
+    
     base_camera = SimpleCameraPerspective()
     base_camera.set_intrinsics(intrinsics)
 
@@ -38,6 +44,15 @@ def make_camera_map(sfm_constraints, metadata, ignore_metadata=False):
         for frame_id in md_map.keys():
             camera_map[frame_id] = SimpleCameraPerspective(base_camera)
     else:
+        # Try to find first valid intrinsics from metadata, similar to TeleSculptor
+        # This provides better defaults when metadata is available
+        for frame_id, frame_metadata in md_map.items():
+            metadata_intrinsics = intrinsics_from_metadata(frame_metadata)
+            if metadata_intrinsics is not None:
+                base_camera.set_intrinsics(metadata_intrinsics)
+                logger.debug(f"Using intrinsics from metadata frame {frame_id}: focal_length={metadata_intrinsics.focal_length()}")
+                break
+        
         analyze_metadata_content(md_map)
         camera_map = initialize_cameras_with_metadata(md_map, base_camera, local_geo_cs)
 
@@ -112,18 +127,43 @@ def intrinsics_from_metadata(metadata, camera_intrinsics=None):
     return intrinsics
 
 
-def update_camera_from_metadata(camera, metadata):
+def update_camera_from_metadata(camera, metadata, local_geo_cs):
     """
     Update camera pose from metadata
     Port of C++ update_camera_from_metadata function
+    
+    Args:
+        camera: Camera to update
+        metadata: Metadata containing position/orientation
+        local_geo_cs: Local geographic coordinate system for coordinate conversion
+    
+    Returns:
+        tuple: (updated_camera, success) where success indicates if metadata was valid
     """
+    has_valid_position = False
+    has_valid_orientation = False
 
     if metadata.has(mt.tags.VITAL_META_SENSOR_LOCATION):
         sensor_loc_object = metadata.find(mt.tags.VITAL_META_SENSOR_LOCATION).data
         if sensor_loc_object is not None and callable(
             getattr(sensor_loc_object, "location", None)
         ):
-            camera.set_center(sensor_loc_object.location())
+            # Match TeleSculptor's coordinate conversion:
+            # vector_3d loc = gloc.location( lgcs.origin().crs() ) - lgcs.origin().location();
+            if local_geo_cs and hasattr(local_geo_cs, 'geo_origin') and local_geo_cs.geo_origin:
+                # Get location in the same CRS as origin, then subtract origin location
+                origin_crs = local_geo_cs.geo_origin.crs()
+                sensor_location_in_origin_crs = sensor_loc_object.location(origin_crs)
+                origin_location = local_geo_cs.geo_origin.location()
+                
+                # Compute local coordinates by subtracting origin
+                local_coords = sensor_location_in_origin_crs - origin_location
+                camera.set_center(local_coords)
+            else:
+                # No origin set yet, use raw location (will be fixed later when origin is set)
+                camera.set_center(sensor_loc_object.location())
+            
+            has_valid_position = True
 
     # Get platform and sensor orientation angles
     platform_yaw_deg = 0.0
@@ -192,7 +232,10 @@ def update_camera_from_metadata(camera, metadata):
     )
 
     if not condition_met:
-        return camera
+        # Return camera and success status - must have either position or orientation
+        return camera, has_valid_position
+    
+    has_valid_orientation = True
     platform_yaw_rad = math.radians(platform_yaw_deg)
     platform_pitch_rad = math.radians(platform_pitch_deg)
     platform_roll_rad = math.radians(platform_roll_deg)
@@ -213,7 +256,8 @@ def update_camera_from_metadata(camera, metadata):
 
     camera.set_rotation(final_rotation_enu)
 
-    return camera
+    # Return camera and success status - has either valid position or valid orientation
+    return camera, has_valid_position or has_valid_orientation
 
 
 def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
@@ -259,13 +303,13 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
             cameras_with_orientation += 1
 
         # Update camera pose from metadata
-        camera = update_camera_from_metadata(camera, metadata)
+        camera, is_valid = update_camera_from_metadata(camera, metadata, local_geo_cs)
 
-        # Add to camera map
-        camera_map[frame_id] = camera
-
-        # Collect camera centers for local origin update
-        camera_centers.append(camera.center())
+        # Only add to camera map if metadata was valid (like TeleSculptor)
+        if is_valid:
+            camera_map[frame_id] = camera
+            # Collect camera centers for local origin update
+            camera_centers.append(camera.center())
 
     # Update local origin to mean of camera positions if we have cameras
     if camera_centers and origin_set:
@@ -292,7 +336,8 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
         local_geo_cs.geo_origin = mean_geo
 
     logger.info(
-        f"Camera initialization complete: {cameras_with_orientation}/{len(metadata_map)} cameras have orientation metadata"
+        f"Camera initialization complete: {len(camera_map)}/{len(metadata_map)} frames have valid metadata, "
+        f"{cameras_with_orientation} have complete orientation data"
     )
 
     return camera_map

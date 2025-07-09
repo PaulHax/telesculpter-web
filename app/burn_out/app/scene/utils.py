@@ -27,6 +27,7 @@ def create_vtk_camera_from_simple_camera(
 
     if image_width <= 0 or image_height <= 0:
         # Estimate from principal point if not set or invalid
+        # This matches TeleSculptor's vtkKwiverCamera::BuildCamera logic
         if principal_point[0] > 0 and principal_point[1] > 0:
             image_width = principal_point[0] * 2.0
             image_height = principal_point[1] * 2.0
