@@ -399,51 +399,15 @@ def create_ground_plan_rep(renderer: vtkRenderer):
     )
 
 
-def calculate_scene_scale_factor(camera_centers: Sequence[Sequence[float]]) -> float:
-    """
-    Calculate appropriate scale factor for visualization, similar to TeleSculptor's approach.
-
-    TeleSculptor normalizes scenes to reasonable visualization units. For very small
-    coordinate scenes (< 1.0 unit extent), we scale up for better visualization.
-    """
-    if not camera_centers:
-        return 1.0
-
-    camera_array = np.array(camera_centers)
-
-    # Calculate scene extent
-    x_extent = np.max(camera_array[:, 0]) - np.min(camera_array[:, 0])
-    y_extent = np.max(camera_array[:, 1]) - np.min(camera_array[:, 1])
-    z_extent = np.max(camera_array[:, 2]) - np.min(camera_array[:, 2])
-    max_extent = max(x_extent, y_extent, z_extent)
-
-    # If scene is very small (typical for SfM without proper scaling), scale it up
-    # Target: scene should have extent of roughly 10-100 units for good visualization
-    if max_extent < 1.0:
-        # Scale to make largest dimension around 50 units
-        target_size = 50.0
-        scale_factor = target_size / max_extent
-    elif max_extent > 1000.0:
-        # Scale down very large scenes
-        target_size = 100.0
-        scale_factor = target_size / max_extent
-    else:
-        # Scene size is reasonable
-        scale_factor = 1.0
-
-    return scale_factor
-
-
 def update_ground_plan_position(
     ground_plan_rep: GroundPlan_Rep,
     camera_centers: Sequence[Sequence[float]],
-    scale_factor: float,
 ):
     """
-    Updates the ground plan position using TeleSculptor's approach with provided scale factor.
+    Updates the ground plan position using TeleSculptor's approach.
 
     Following TeleSculptor's canonical transform estimation:
-    - Uses provided scale factor for consistency with other representations
+    - Uses unscaled camera positions (matching TeleSculptor)
     - Positions ground plane below 5th percentile of camera heights
     - Scales to 1.5x maximum horizontal extent of camera trajectory
     - Ensures proper orientation relative to camera viewing direction
@@ -453,13 +417,11 @@ def update_ground_plan_position(
 
     camera_array = np.array(camera_centers)
 
-    # Apply scaling to camera positions using provided scale factor
-    scaled_camera_array = camera_array * scale_factor
-
+    # Use unscaled camera positions (TeleSculptor doesn't scale camera positions)
     # Calculate robust bounds (following TeleSculptor's getBounds approach)
-    x_min, x_max = np.min(scaled_camera_array[:, 0]), np.max(scaled_camera_array[:, 0])
-    y_min, y_max = np.min(scaled_camera_array[:, 1]), np.max(scaled_camera_array[:, 1])
-    z_values = scaled_camera_array[:, 2]
+    x_min, x_max = np.min(camera_array[:, 0]), np.max(camera_array[:, 0])
+    y_min, y_max = np.min(camera_array[:, 1]), np.max(camera_array[:, 1])
+    z_values = camera_array[:, 2]
 
     # Use 5th percentile for ground plane height (TeleSculptor's height_percentile = 0.05)
     ground_z = np.percentile(z_values, 5)
@@ -473,8 +435,8 @@ def update_ground_plan_position(
     ground_scale = max(1.5 * max_horizontal_extent, 10.0)  # Minimum size
 
     # Calculate grid center (centroid of camera positions in X-Y plane)
-    center_x = np.mean(scaled_camera_array[:, 0])
-    center_y = np.mean(scaled_camera_array[:, 1])
+    center_x = np.mean(camera_array[:, 0])
+    center_y = np.mean(camera_array[:, 1])
 
     # Create grid with TeleSculptor-style positioning
     # Grid is centered on camera trajectory centroid, scaled appropriately
@@ -562,7 +524,6 @@ class WorldView:
         self.camera_map = {}
         self._camera_reset_done = False  # Track if camera has been reset already
         self._throttled_update = create_throttler(UPDATE_THROTTLE_INTERVAL)
-        self._scene_scale_factor = 1.0  # Shared scale factor for all representations
 
     def create_view(self):
         self.html_view = vtk_widgets.VtkLocalView(
@@ -621,11 +582,6 @@ class WorldView:
         camera_map = getattr(self, "camera_map", {})
         centers = [camera.center().tolist() for camera in camera_map.values()]
 
-        # Calculate shared scene scale factor once for all representations
-        self._scene_scale_factor = (
-            calculate_scene_scale_factor(centers) if centers else 1.0
-        )
-
         # Use original camera positions (not scaled) for visualization
         # TeleSculptor doesn't scale camera positions, only frustum sizes
         update_positions_rep(self.pipeline.positions_rep, centers)
@@ -650,10 +606,10 @@ class WorldView:
         # Show frustums when cameras are available, hide dummy otherwise
         self.pipeline.frustums_rep.actor.SetVisibility(len(camera_map) > 0)
 
-        # Update ground plan position using TeleSculptor's approach with shared scale factor
+        # Update ground plan position using TeleSculptor's approach
         if centers:
             update_ground_plan_position(
-                self.pipeline.ground_plan_rep, centers, self._scene_scale_factor
+                self.pipeline.ground_plan_rep, centers
             )
 
         # Only reset camera the first time with a valid camera_map
