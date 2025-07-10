@@ -61,12 +61,13 @@ def create_vtk_camera_from_simple_camera(
     center_w = np.array(simple_cam.center().tolist())
     R_wc = np.array(simple_cam.rotation().matrix())  # World from Camera matrix
 
-    # vtkKwiverCamera uses rows, not columns!
-    # Match exact vtkKwiverCamera behavior:
-    # auto const view = rotationMatrix.row(2).transpose();
-    # auto const up = -rotationMatrix.row(1).transpose();
-    view_dir_w = R_wc[2, :]   # Row 2: view direction (camera Z axis in world)
-    up_dir_w = -R_wc[1, :]    # Row 1 negated: up direction (camera Y axis negated)
+    # FIXED: Based on systematic testing, the matrix axes are swapped from expectation
+    # Test pattern H_swap_view_right scored 6/6 for right-looking aerial camera
+    # Row 0 contains the actual view direction (east and down)
+    # Row 1 negated contains the up direction (skyward)
+    # Row 2 contains the right direction
+    view_dir_w = R_wc[0, :]   # Row 0: actual view direction 
+    up_dir_w = -R_wc[1, :]    # Row 1 negated: up direction
     # old way
     # view_dir_w = R_wc[:, 2]
     # up_dir_w = -R_wc[:, 1]
