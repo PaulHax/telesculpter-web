@@ -257,52 +257,6 @@ def update_camera_from_metadata(camera, metadata, local_geo_cs):
 
     final_rotation_enu = ned_to_enu(combined_rotation_ned)
 
-    # Debug: Print angles for first few frames to check metadata interpretation
-    if hasattr(update_camera_from_metadata, "debug_count"):
-        update_camera_from_metadata.debug_count += 1
-    else:
-        update_camera_from_metadata.debug_count = 1
-
-    if update_camera_from_metadata.debug_count <= 5:
-        print(
-            f"\nDEBUG Metadata angles (frame {update_camera_from_metadata.debug_count}):"
-        )
-        print(
-            f"  Platform: yaw={platform_yaw_deg:.2f}°, pitch={platform_pitch_deg:.2f}°, roll={platform_roll_deg:.2f}°"
-        )
-        print(
-            f"  Sensor: yaw={sensor_yaw_deg:.2f}°, pitch={sensor_pitch_deg:.2f}°, roll={sensor_roll_deg:.2f}°"
-        )
-        print(f"  Combined NED matrix:\n{combined_rotation_ned.matrix()}")
-        print(f"  Final ENU matrix:\n{final_rotation_enu.matrix()}")
-
-        # Test coordinate system interpretation
-        R_enu = final_rotation_enu.matrix()
-        print(f"  Camera axes in world coordinates (ENU):")
-        print(
-            f"    Camera X (right):   {R_enu[0, :]} = [{R_enu[0, 0]:.3f}, {R_enu[0, 1]:.3f}, {R_enu[0, 2]:.3f}]"
-        )
-        print(
-            f"    Camera Y (up):      {R_enu[1, :]} = [{R_enu[1, 0]:.3f}, {R_enu[1, 1]:.3f}, {R_enu[1, 2]:.3f}]"
-        )
-        print(
-            f"    Camera Z (forward): {R_enu[2, :]} = [{R_enu[2, 0]:.3f}, {R_enu[2, 1]:.3f}, {R_enu[2, 2]:.3f}]"
-        )
-
-        # Expected directions for right-looking aerial camera:
-        # X (right): should point roughly in +Y world direction (east)
-        # Y (up): should point roughly in +Z world direction (up)
-        # Z (forward): should point roughly in +Y (east) and -Z (down)
-        print(
-            f"  Expected for right-looking camera: X→+Y(east), Y→+Z(up), Z→+Y(east)-Z(down)"
-        )
-        print(
-            f"  Analysis: Camera Z pointing {R_enu[2, 0]:.3f}(X), {R_enu[2, 1]:.3f}(Y), {R_enu[2, 2]:.3f}(Z)"
-        )
-        if R_enu[2, 1] > 0 and R_enu[2, 2] < 0:
-            print(f"  ✓ Camera looking east and down (correct direction)")
-        else:
-            print(f"  ✗ Camera NOT looking east and down (wrong direction)")
 
     camera.set_rotation(final_rotation_enu)
 
@@ -367,17 +321,6 @@ def initialize_cameras_with_metadata(metadata_map, base_camera, local_geo_cs):
             # Collect camera centers for local origin update
             camera_centers.append(camera.center())
 
-            # Debug: Print rotation info for first few frames
-            if frame_id <= 5 or frame_id % 50 == 0:  # First 5 and every 50th frame
-                R_matrix = camera.rotation().matrix()
-                print(f"\nDEBUG Camera {frame_id}:")
-                print(f"  Final rotation matrix:\n{R_matrix}")
-                print(f"  Right direction (row 0): {R_matrix[0, :]}")
-                print(
-                    f"  Up direction (row 1): {R_matrix[1, :]} -> negated: {-R_matrix[1, :]}"
-                )
-                print(f"  Forward direction (row 2): {R_matrix[2, :]}")
-                print(f"  Center: {camera.center()}")
 
     # Update local origin to mean of camera positions if we have cameras
     if camera_centers and origin_set:
