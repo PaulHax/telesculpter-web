@@ -61,18 +61,32 @@ def create_vtk_camera_from_simple_camera(
     center_w = np.array(simple_cam.center().tolist())
     R_wc = np.array(simple_cam.rotation().matrix())  # World from Camera matrix
 
-    view_dir_w = R_wc[:, 2]
-    up_dir_w = -R_wc[:, 1]
+    # vtkKwiverCamera uses rows, not columns!
+    # Match exact vtkKwiverCamera behavior:
+    # auto const view = rotationMatrix.row(2).transpose();
+    # auto const up = -rotationMatrix.row(1).transpose();
+    view_dir_w = R_wc[2, :]   # Row 2: view direction (camera Z axis in world)
+    up_dir_w = -R_wc[1, :]    # Row 1 negated: up direction (camera Y axis negated)
+    # old way
+    # view_dir_w = R_wc[:, 2]
+    # up_dir_w = -R_wc[:, 1]
 
     vtk_cam.SetPosition(center_w[0], center_w[1], center_w[2])
     vtk_cam.SetViewUp(up_dir_w[0], up_dir_w[1], up_dir_w[2])
 
-    distance_to_focal_point = vtk_cam.GetDistance()
-    if np.linalg.norm(view_dir_w) < 1e-6:
+    # Use a fixed distance for focal point calculation (matching TeleSculptor)
+    # This needs to be set before calling GetDistance()
+    distance_to_focal_point = 1.0  # Default VTK distance
+
+    # Normalize view direction
+    view_norm = np.linalg.norm(view_dir_w)
+    if view_norm < 1e-6:
         view_dir_w_norm = np.array([0.0, 0.0, 1.0])
     else:
-        view_dir_w_norm = view_dir_w / np.linalg.norm(view_dir_w)
+        view_dir_w_norm = view_dir_w / view_norm
 
+    # Calculate focal point: center + (view * distance / |view|)
+    # Note: view is already extracted from rotation matrix, so we just normalize it
     focal_point_w = center_w + view_dir_w_norm * distance_to_focal_point
     vtk_cam.SetFocalPoint(focal_point_w[0], focal_point_w[1], focal_point_w[2])
 
