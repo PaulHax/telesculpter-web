@@ -1,8 +1,15 @@
-from kwiver.vital.types import SimpleCameraPerspective
+"""
+Utility functions for converting between KWIVER camera objects and VTK coordinate systems.
+These utilities specifically handle VTK world coordinate transformations.
+"""
+from typing import List, Tuple, NamedTuple, Optional
 import numpy as np
-from vtkmodules.vtkRenderingCore import vtkCamera
 import math
-from typing import List, NamedTuple, Optional, Tuple
+from vtkmodules.vtkCommonCore import vtkPoints
+from vtkmodules.vtkCommonDataModel import vtkCellArray, vtkPlanes
+from vtkmodules.vtkFiltersSources import vtkFrustumSource
+from vtkmodules.vtkRenderingCore import vtkCamera
+from kwiver.vital.types import SimpleCameraPerspective
 
 
 class VtkCameraBundle(NamedTuple):
@@ -211,9 +218,6 @@ def compute_frustum_ground_intersection(
         List of 3D points forming the intersection polygon, or None if no intersection
     """
     # Use VTK's frustum source to get corner points
-    from vtkmodules.vtkCommonDataModel import vtkPlanes
-    from vtkmodules.vtkFiltersSources import vtkFrustumSource
-    
     planes_object = vtkPlanes()
     planes_object.SetFrustumPlanes(frustum_planes)
     
@@ -309,3 +313,97 @@ def compute_frustum_ground_intersection(
     sorted_points = [unique_points[i] for i in sorted_indices]
     
     return sorted_points
+
+
+def get_camera_view_direction_vtk(camera) -> np.ndarray:
+    """
+    Extract camera view direction in VTK world coordinates from KWIVER SimpleCameraPerspective.
+    
+    Parameters:
+        camera: KWIVER SimpleCameraPerspective object
+        
+    Returns:
+        View direction vector in VTK world coordinates
+    """
+    R_wc = np.array(camera.rotation().matrix())
+    R_T = R_wc.T
+    return R_T[0, :]  # Camera view direction in world coordinates
+
+
+def get_frustum_far_corners_vtk(camera, near_clip: float, far_clip: float, scale: float = 1.0) -> List[np.ndarray]:
+    """
+    Extract far plane corner points from camera frustum using VTK.
+    
+    Parameters:
+        camera: KWIVER SimpleCameraPerspective object
+        near_clip: Near clipping plane distance
+        far_clip: Far clipping plane distance
+        scale: Scale factor for frustum size
+        
+    Returns:
+        List of 4 corner points from frustum far plane in VTK world coordinates
+    """
+    frustum_planes = get_frustum_planes_from_simple_camera(
+        camera, near_clip, far_clip, scale
+    )
+    
+    planes_object = vtkPlanes()
+    planes_object.SetFrustumPlanes(frustum_planes)
+    
+    frustum_source = vtkFrustumSource()
+    frustum_source.SetPlanes(planes_object)
+    frustum_source.ShowLinesOff()
+    frustum_source.Update()
+    
+    frustum_poly = frustum_source.GetOutput()
+    if not frustum_poly or frustum_poly.GetNumberOfPoints() != 8:
+        return []
+    
+    # Get the 4 far corners of the frustum (these define the field of view)
+    # Far plane: 0:FBL, 1:FBR, 2:FTR, 3:FTL
+    far_corners = []
+    for i in range(4):  # Only far plane corners
+        pt = frustum_poly.GetPoint(i)
+        far_corners.append(np.array(pt))
+    
+    return far_corners
+
+
+def create_ground_projection_lines_vtk(camera_center: np.ndarray, far_corners: List[np.ndarray], ground_z: float = 0.0) -> Tuple[vtkPoints, vtkCellArray]:
+    """
+    Create VTK points and lines for ground projection from frustum corners.
+    
+    Parameters:
+        camera_center: Camera position in VTK world coordinates
+        far_corners: List of far plane corner points in VTK world coordinates
+        ground_z: Z coordinate of the ground plane
+        
+    Returns:
+        Tuple of (vtkPoints, vtkCellArray) for the projection lines in VTK world coordinates
+    """
+    points = vtkPoints()
+    lines = vtkCellArray()
+    
+    for corner in far_corners:
+        # Calculate intersection with ground plane
+        # Ray from camera through corner to ground
+        ray_dir = corner - camera_center
+        ray_dir_norm = ray_dir / np.linalg.norm(ray_dir)
+        
+        # Ray-plane intersection: t = (ground_z - camera_z) / ray_dir_z
+        if ray_dir_norm[2] < 0:  # Ray going downward
+            t = (ground_z - camera_center[2]) / ray_dir_norm[2]
+            if t > 0:  # Valid intersection
+                ground_point = camera_center + ray_dir_norm * t
+                
+                # Add line from frustum corner to ground point
+                corner_id = points.InsertNextPoint(corner[0], corner[1], corner[2])
+                ground_id = points.InsertNextPoint(
+                    ground_point[0], ground_point[1], ground_point[2]
+                )
+                
+                lines.InsertNextCell(2)
+                lines.InsertCellPoint(corner_id)
+                lines.InsertCellPoint(ground_id)
+    
+    return points, lines

@@ -14,7 +14,7 @@ from .ui import VideoControls, FileMenu, ViewMenu, HelpMenu, AboutDialog
 from .utils import VideoAdapter, wait_for_network_and_time
 from .video_importer import VideoImporter
 from .dialogs import TclTKDialog, TauriDialog
-from .world_view import WorldView
+from .world_view.world_view import WorldView
 
 from kwiver.vital.algo import VideoInput
 from kwiver.vital.types import Timestamp

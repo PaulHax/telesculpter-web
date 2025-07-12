@@ -22,11 +22,14 @@ from trame.widgets import vtk as vtk_widgets
 from trame.app import asynchronous
 import logging
 
-from .scene.utils import (
-    get_frustum_planes_from_simple_camera,  # Added
+from ..utils import create_throttler
+from .kwiver_vtk_util import (
+    get_camera_view_direction_vtk,
+    get_frustum_far_corners_vtk,
+    create_ground_projection_lines_vtk,
+    get_frustum_planes_from_simple_camera,
     compute_frustum_ground_intersection,
 )
-from .utils import create_throttler
 
 
 colors = vtkNamedColors()
@@ -44,66 +47,39 @@ CAMERA_UI_SCALE = 0.25  # Default scale for active camera
 INACTIVE_SCALE_FACTOR = 0.1  # Inactive cameras are 0.1x active scale
 
 
-def calculate_frustum_far_clip(camera_centers: Sequence[Sequence[float]], 
-                               is_active: bool = False, active_camera=None) -> float:
+def calculate_frustum_far_clip(
+    camera_centers: Sequence[Sequence[float]], is_active: bool = False
+) -> float:
     """
-    Calculate frustum far clip distance ensuring it reaches ground plane for active camera.
-    
+    Calculate frustum far clip distance based on scene bounds.
+    Follows TeleSculptor's approach: 0.9 * bbox diagonal * UI scale factors.
+
     Args:
         camera_centers: List of camera center coordinates
         is_active: Whether this is for the active camera (larger frustum)
-        active_camera: The active camera object (needed for view direction calculation)
-    
+
     Returns:
         Far clip distance for frustum
     """
     if not camera_centers:
         return FAR_CLIP_ACTIVE if is_active else FAR_CLIP_INACTIVE
-    
+
+    # Compute bounding box diagonal like TeleSculptor's updateScale
     camera_array = np.array(camera_centers)
-    
-    # For active camera, calculate distance to reach ground plane along view direction
-    if is_active and active_camera is not None:
-        # Get camera position and view direction
-        camera_center = np.array(active_camera.center().tolist())
-        R_wc = np.array(active_camera.rotation().matrix())
-        R_T = R_wc.T
-        view_dir_w = R_T[0, :]  # Camera view direction in world coordinates
-        
-        ground_z = 0.0
-        camera_z = camera_center[2]
-        
-        # Only calculate ground intersection for downward-looking cameras
-        if view_dir_w[2] < 0 and camera_z > ground_z:
-            # Calculate distance along view ray to reach ground plane
-            # Using ray-plane intersection: t = (ground_z - camera_z) / view_dir_z
-            t = (ground_z - camera_z) / view_dir_w[2]
-            if t > 0:  # Ray intersects ground in forward direction
-                # Add 10% margin to ensure intersection
-                ground_distance = t * 1.1
-                
-                # Use TeleSculptor's scene-based calculation as baseline
-                bbox_min = np.min(camera_array, axis=0)
-                bbox_max = np.max(camera_array, axis=0)
-                bbox_diagonal = np.linalg.norm(bbox_max - bbox_min)
-                base_camera_scale = 0.9 * bbox_diagonal
-                scene_based_clip = base_camera_scale * CAMERA_UI_SCALE
-                
-                # Use the larger of ground-reaching distance or scene-based distance
-                return max(ground_distance, scene_based_clip, FAR_CLIP_ACTIVE)
-    
-    # Fallback to original TeleSculptor approach for inactive cameras or when can't reach ground
     bbox_min = np.min(camera_array, axis=0)
     bbox_max = np.max(camera_array, axis=0)
     bbox_diagonal = np.linalg.norm(bbox_max - bbox_min)
+
     base_camera_scale = 0.9 * bbox_diagonal
-    
+
     if is_active:
         frustum_far_clip = base_camera_scale * CAMERA_UI_SCALE
-        return max(frustum_far_clip, FAR_CLIP_ACTIVE)
+        min_clip = FAR_CLIP_ACTIVE
     else:
         frustum_far_clip = base_camera_scale * CAMERA_UI_SCALE * INACTIVE_SCALE_FACTOR
-        return max(frustum_far_clip, FAR_CLIP_INACTIVE)
+        min_clip = FAR_CLIP_INACTIVE
+
+    return max(frustum_far_clip, min_clip)
 
 
 def build_camera_frustum(
@@ -203,12 +179,19 @@ class FrustumFootprint_Rep(NamedTuple):
     actor: vtkActor
 
 
+class GroundProjection_Rep(NamedTuple):
+    poly_data: vtkPolyData
+    mapper: vtkPolyDataMapper
+    actor: vtkActor
+
+
 class Pipeline(NamedTuple):
     positions_rep: Positions_Rep
     frustums_rep: Frustums_Rep
     active_frustum_rep: ActiveFrustum_Rep
     ground_plan_rep: GroundPlan_Rep
     frustum_footprint_rep: FrustumFootprint_Rep
+    ground_projection_rep: GroundProjection_Rep
     renderer: vtkRenderer
     render_window: vtkRenderWindow
 
@@ -437,7 +420,7 @@ def create_frustum_footprint_rep(renderer: vtkRenderer):
     Creates a frustum footprint representation for showing camera view on ground.
     """
     poly_data = vtkPolyData()
-    
+
     # workaround: initial actor needs renderable polydata or Color won't work without full browser refresh
     points = vtkPoints()
     points.InsertNextPoint(0, 0, 0)
@@ -453,19 +436,19 @@ def create_frustum_footprint_rep(renderer: vtkRenderer):
     polys = vtkCellArray()
     polys.InsertNextCell(triangle)
     poly_data.SetPolys(polys)
-    
+
     mapper = vtkPolyDataMapper()
     mapper.SetInputData(poly_data)
-    
+
     actor = vtkActor()
     actor.SetMapper(mapper)
-    actor.GetProperty().SetColor(colors.GetColor3d("Yellow"))
-    actor.GetProperty().SetOpacity(1.0)  # Fully opaque
+    actor.GetProperty().SetColor(colors.GetColor3d("Orange"))
+    actor.GetProperty().SetOpacity(0.7)
     actor.GetProperty().SetLineWidth(2.0)
     actor.SetVisibility(False)  # Hide dummy triangle initially
-    
+
     renderer.AddActor(actor)
-    
+
     return FrustumFootprint_Rep(
         poly_data=poly_data,
         mapper=mapper,
@@ -473,13 +456,43 @@ def create_frustum_footprint_rep(renderer: vtkRenderer):
     )
 
 
+def create_ground_projection_rep(renderer: vtkRenderer):
+    """
+    Creates projection lines from camera frustum corners to ground plane.
+    """
+    poly_data = vtkPolyData()
+
+    # Initialize with empty lines
+    points = vtkPoints()
+    lines = vtkCellArray()
+    poly_data.SetPoints(points)
+    poly_data.SetLines(lines)
+
+    mapper = vtkPolyDataMapper()
+    mapper.SetInputData(poly_data)
+
+    actor = vtkActor()
+    actor.SetMapper(mapper)
+    actor.GetProperty().SetColor(colors.GetColor3d("Orange"))
+    actor.GetProperty().SetLineWidth(1.5)
+    actor.SetVisibility(False)  # Hide initially
+
+    renderer.AddActor(actor)
+
+    return GroundProjection_Rep(
+        poly_data=poly_data,
+        mapper=mapper,
+        actor=actor,
+    )
+
+
 def update_frustum_footprint_rep(
-    footprint_rep: FrustumFootprint_Rep, 
-    footprint_points: Optional[List[Tuple[float, float, float]]]
+    footprint_rep: FrustumFootprint_Rep,
+    footprint_points: Optional[List[Tuple[float, float, float]]],
 ):
     """
     Updates the frustum footprint polygon.
-    
+
     Parameters:
         footprint_rep: The footprint representation to update
         footprint_points: List of 3D points forming the footprint polygon, or None
@@ -488,34 +501,85 @@ def update_frustum_footprint_rep(
         # Hide the footprint if no valid intersection
         footprint_rep.actor.SetVisibility(False)
         return
-    
+
     # Create points
     points = vtkPoints()
     for pt in footprint_points:
         points.InsertNextPoint(pt[0], pt[1], pt[2])
-    
+
     # Create polygon
     polygon = vtkCellArray()
     polygon.InsertNextCell(len(footprint_points))
     for i in range(len(footprint_points)):
         polygon.InsertCellPoint(i)
-    
+
     # Update polydata
     footprint_rep.poly_data.SetPoints(points)
     footprint_rep.poly_data.SetPolys(polygon)
-    
+
     # Also add outline
     lines = vtkCellArray()
     lines.InsertNextCell(len(footprint_points) + 1)  # +1 to close the loop
     for i in range(len(footprint_points)):
         lines.InsertCellPoint(i)
     lines.InsertCellPoint(0)  # Close the loop
-    
+
     footprint_rep.poly_data.SetLines(lines)
     footprint_rep.poly_data.Modified()
-    
+
     # Make sure it's visible
     footprint_rep.actor.SetVisibility(True)
+
+
+def update_ground_projection_rep(
+    projection_rep: GroundProjection_Rep, active_camera, ground_z: float = 0.0
+):
+    """
+    Updates the ground projection lines from frustum corners to ground plane.
+
+    Parameters:
+        projection_rep: The projection representation to update
+        active_camera: The active camera object, or None to hide
+        ground_z: Z coordinate of the ground plane
+    """
+    if not active_camera:
+        projection_rep.actor.SetVisibility(False)
+        return
+
+    # Get camera position and view direction using utility
+    camera_center = np.array(active_camera.center().tolist())
+    view_dir_w = get_camera_view_direction_vtk(active_camera)
+
+    # Only show projections for downward-looking cameras above ground
+    if view_dir_w[2] >= 0 or camera_center[2] <= ground_z:
+        projection_rep.actor.SetVisibility(False)
+        return
+
+    # Calculate frustum far clip distance
+    camera_centers = [camera_center.tolist()]
+    frustum_far_clip = calculate_frustum_far_clip(camera_centers, is_active=True)
+
+    # Get frustum far corners using utility
+    far_corners = get_frustum_far_corners_vtk(
+        active_camera, NEAR_CLIP, frustum_far_clip, FRUSTUM_SCALE
+    )
+    
+    if not far_corners:
+        projection_rep.actor.SetVisibility(False)
+        return
+
+    # Create projection lines using utility
+    points, lines = create_ground_projection_lines_vtk(
+        camera_center, far_corners, ground_z
+    )
+
+    # Update polydata
+    projection_rep.poly_data.SetPoints(points)
+    projection_rep.poly_data.SetLines(lines)
+    projection_rep.poly_data.Modified()
+
+    # Make sure it's visible
+    projection_rep.actor.SetVisibility(True)
 
 
 def update_ground_plan_position(
@@ -628,6 +692,7 @@ def create_pipeline():
         active_frustum_rep=create_active_frustum_rep(renderer),
         ground_plan_rep=create_ground_plan_rep(renderer),
         frustum_footprint_rep=create_frustum_footprint_rep(renderer),
+        ground_projection_rep=create_ground_projection_rep(renderer),
         renderer=renderer,
         render_window=render_window,
     )
@@ -658,12 +723,12 @@ class WorldView:
 
     def update_camera_map(self, camera_map):
         self.camera_map = camera_map
-        
+
         # Reset camera to show the scene when cameras are loaded
         if camera_map:
             self.pipeline.renderer.ResetCamera()
             self.html_view.push_camera()
-        
+
         self._update_cameras()
         # Update active camera for initial display when camera map is loaded
         if camera_map:
@@ -681,12 +746,14 @@ class WorldView:
         active_camera = camera_map.get(active_camera_id)
 
         if active_camera:
-            # Calculate active camera frustum with dynamic scaling
+            # Calculate active camera frustum with original scaling (no ground extension)
             camera_centers = [cam.center().tolist() for cam in self.camera_map.values()]
-            active_frustum_far_clip = calculate_frustum_far_clip(camera_centers, is_active=True, active_camera=active_camera)
+            active_frustum_far_clip = calculate_frustum_far_clip(
+                camera_centers, is_active=True
+            )
 
             active_frustum_planes = get_frustum_planes_from_simple_camera(
-                active_camera,  # Use original camera, not scaled
+                active_camera,
                 NEAR_CLIP,
                 active_frustum_far_clip,
                 FRUSTUM_SCALE,
@@ -695,10 +762,21 @@ class WorldView:
                 self.pipeline.active_frustum_rep, active_frustum_planes
             )
             self.pipeline.active_frustum_rep.actor.SetVisibility(True)
-            
-            # Compute and update frustum footprint
+
+            # Update ground projection lines from frustum corners to ground
+            update_ground_projection_rep(
+                self.pipeline.ground_projection_rep, active_camera, ground_z=0.0
+            )
+
+            # Compute and update frustum footprint using extended frustum for intersection
+            extended_frustum_planes = get_frustum_planes_from_simple_camera(
+                active_camera,
+                NEAR_CLIP,
+                active_frustum_far_clip * 10,  # Extend far enough to reach ground
+                FRUSTUM_SCALE,
+            )
             footprint_points = compute_frustum_ground_intersection(
-                active_frustum_planes, ground_z=0.0
+                extended_frustum_planes, ground_z=0.0
             )
             update_frustum_footprint_rep(
                 self.pipeline.frustum_footprint_rep, footprint_points
@@ -706,9 +784,10 @@ class WorldView:
         else:
             update_active_frustum_rep(self.pipeline.active_frustum_rep, None)
             self.pipeline.active_frustum_rep.actor.SetVisibility(False)
-            
-            # Hide footprint when no active camera
+
+            # Hide footprint and projection lines when no active camera
             update_frustum_footprint_rep(self.pipeline.frustum_footprint_rep, None)
+            update_ground_projection_rep(self.pipeline.ground_projection_rep, None)
 
         # Use throttled updates to prevent interference with video timing
         # Fixes WSL-specific bug where VTK updates interfere with video playback timing
@@ -744,9 +823,7 @@ class WorldView:
 
         # Update ground plan position using TeleSculptor's approach
         if centers:
-            update_ground_plan_position(
-                self.pipeline.ground_plan_rep, centers
-            )
+            update_ground_plan_position(self.pipeline.ground_plan_rep, centers)
 
         # Only reset camera the first time with a valid camera_map
         if camera_map and not self._camera_reset_done:

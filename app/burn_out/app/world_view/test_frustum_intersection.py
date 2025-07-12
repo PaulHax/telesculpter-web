@@ -2,13 +2,8 @@
 
 import unittest
 import numpy as np
-import sys
-import os
 
-# Add parent directory to path to import the module
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from burn_out.app.scene.utils import (
+from .kwiver_vtk_util import (
     compute_frustum_ground_intersection,
     get_frustum_planes,
     create_vtk_camera_from_simple_camera,
