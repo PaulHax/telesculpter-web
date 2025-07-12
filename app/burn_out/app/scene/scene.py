@@ -130,6 +130,10 @@ def update_camera_from_metadata(camera, metadata, local_geo_cs):
     """
     Update camera pose from metadata
     Port of C++ update_camera_from_metadata function
+    
+    NOTE: More permissive than TeleSculptor/KWIVER - accepts position-only metadata and missing sensor roll data.
+    TeleSculptor requires complete orientation metadata (all platform+sensor angles) for camera validation.
+    This results in BurnoutWeb showing camera frustums from frames with incomplete orientation data.
 
     Args:
         camera: Camera to update
