@@ -2,7 +2,7 @@ from kwiver.vital.types import SimpleCameraPerspective
 import numpy as np
 from vtkmodules.vtkRenderingCore import vtkCamera
 import math
-from typing import List, NamedTuple
+from typing import List, NamedTuple, Optional, Tuple
 
 
 class VtkCameraBundle(NamedTuple):
@@ -190,3 +190,122 @@ def get_frustum_planes_from_simple_camera(
     )
     planes_coeffs = get_frustum_planes(camera_bundle, scale)
     return planes_coeffs
+
+
+def compute_frustum_ground_intersection(
+    frustum_planes: List[float], ground_z: float = 0.0
+) -> Optional[List[Tuple[float, float, float]]]:
+    """
+    Computes the intersection polygon between a camera frustum and the ground plane.
+    
+    This implementation uses a more robust approach by finding the intersection
+    of the ground plane with the frustum volume directly, rather than computing
+    edge intersections.
+    
+    Parameters:
+        frustum_planes: List of 24 floats representing 6 frustum planes (4 coefficients each)
+                       Order: Right, Left, Bottom, Top, Near, Far
+        ground_z: Z coordinate of the ground plane (default 0.0)
+    
+    Returns:
+        List of 3D points forming the intersection polygon, or None if no intersection
+    """
+    # Use VTK's frustum source to get corner points
+    from vtkmodules.vtkCommonDataModel import vtkPlanes
+    from vtkmodules.vtkFiltersSources import vtkFrustumSource
+    
+    planes_object = vtkPlanes()
+    planes_object.SetFrustumPlanes(frustum_planes)
+    
+    frustum_source = vtkFrustumSource()
+    frustum_source.SetPlanes(planes_object)
+    frustum_source.ShowLinesOff()
+    frustum_source.Update()
+    
+    frustum_poly = frustum_source.GetOutput()
+    if not frustum_poly or frustum_poly.GetNumberOfPoints() != 8:
+        return None
+    
+    # Get the 8 corner points of the frustum
+    # Points from vtkFrustumSource (ShowLinesOff=True):
+    # Far plane: 0:FBL, 1:FBR, 2:FTR, 3:FTL
+    # Near plane: 4:NBL, 5:NBR, 6:NTR, 7:NTL
+    corners = []
+    for i in range(8):
+        pt = frustum_poly.GetPoint(i)
+        corners.append(np.array(pt))
+    
+    # Find which corners are above and below the ground plane
+    above_ground = []
+    below_ground = []
+    
+    for i, corner in enumerate(corners):
+        if corner[2] > ground_z:
+            above_ground.append(i)
+        else:
+            below_ground.append(i)
+    
+    # If all points are on one side, no intersection
+    if len(above_ground) == 0 or len(below_ground) == 0:
+        return None
+    
+    # Find intersection points where frustum edges cross the ground plane
+    intersection_points = []
+    
+    # Define the 12 edges of the frustum
+    edges = [
+        # Near plane edges
+        (4, 5), (5, 6), (6, 7), (7, 4),
+        # Far plane edges  
+        (0, 1), (1, 2), (2, 3), (3, 0),
+        # Connecting edges
+        (0, 4), (1, 5), (2, 6), (3, 7)
+    ]
+    
+    for v1_idx, v2_idx in edges:
+        v1 = corners[v1_idx]
+        v2 = corners[v2_idx]
+        
+        # Check if edge crosses ground plane
+        z1_above = v1[2] > ground_z
+        z2_above = v2[2] > ground_z
+        
+        if z1_above != z2_above:  # Edge crosses ground
+            # Find intersection point using linear interpolation
+            t = (ground_z - v1[2]) / (v2[2] - v1[2])
+            intersection = v1 + t * (v2 - v1)
+            intersection_points.append(tuple(intersection))
+    
+    # Also add any corners that lie exactly on the ground plane
+    for i, corner in enumerate(corners):
+        if abs(corner[2] - ground_z) < 1e-6:
+            intersection_points.append(tuple(corner))
+    
+    # Remove duplicate points
+    unique_points = []
+    for point in intersection_points:
+        is_duplicate = False
+        for existing in unique_points:
+            if np.linalg.norm(np.array(point) - np.array(existing)) < 1e-6:
+                is_duplicate = True
+                break
+        if not is_duplicate:
+            unique_points.append(point)
+    
+    if len(unique_points) < 3:
+        return None  # No valid polygon
+    
+    # Sort points to form a proper polygon
+    # Project to 2D (x,y) and sort by angle from centroid
+    points_2d = [(p[0], p[1]) for p in unique_points]
+    centroid = np.mean(points_2d, axis=0)
+    
+    def angle_from_centroid(point):
+        return np.arctan2(point[1] - centroid[1], point[0] - centroid[0])
+    
+    sorted_indices = sorted(range(len(unique_points)), 
+                          key=lambda i: angle_from_centroid(points_2d[i]))
+    
+    sorted_points = [unique_points[i] for i in sorted_indices]
+    
+    return sorted_points
